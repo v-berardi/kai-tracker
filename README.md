@@ -1,0 +1,165 @@
+# K-AI Hardware Tracker
+
+I built this project to follow the news around the AI memory chip
+supply chain (SK Hynix, Nvidia, Samsung, TSMC) and compare it with
+their stock prices. It collects news and stock prices, scores each
+news headline with a financial NLP model (FinBERT), and then checks
+with a basic statistical test if sentiment spikes are actually
+followed by unusual stock returns.
+
+**This is a monitoring tool, not a trading tool.** It does not try to
+predict prices. It checks if there is a link between news sentiment
+and stock returns, and shows the real result, even when that result is
+"no clear link" or something that doesn't fit a simple story.
+
+## Why I built this
+
+I wanted a project that goes through a full, real pipeline: collecting
+data, storing it, running an NLP model on it, and checking the result
+with an actual statistical test instead of just assuming sentiment and
+price are related. It also let me practice building a small dashboard
+on top of it.
+
+## The pipeline
+
+```
+scripts/run_ingestion.py   -->  prices (yfinance) + news (Google News RSS)
+scripts/run_sentiment.py   -->  scores new articles with FinBERT
+scripts/run_event_study.py -->  checks if sentiment spikes line up with abnormal returns
+app/dashboard.py           -->  Streamlit dashboard showing all of the above
+```
+
+Project layout:
+
+```
+kai-tracker/
+├── data/                  # SQLite database (created on first run, not in git)
+├── scripts/
+│   ├── run_ingestion.py    # collect prices + news
+│   ├── run_sentiment.py    # score articles with FinBERT
+│   └── run_event_study.py  # print the event study results
+├── src/
+│   ├── config.py            # tickers, news queries, settings
+│   ├── ingestion/
+│   │   ├── market.py         # stock prices from yfinance
+│   │   └── news.py           # news from Google News RSS
+│   ├── nlp/
+│   │   └── sentiment.py      # FinBERT sentiment scoring
+│   ├── storage/
+│   │   └── db.py             # SQLite database functions
+│   └── analysis/
+│       └── event_study.py    # the statistical test
+├── tests/
+│   └── test_event_study.py   # unit tests, run without a database
+└── app/
+    └── dashboard.py          # Streamlit + Plotly dashboard
+```
+
+## How to run it
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+python scripts/run_ingestion.py             # 1. collect prices + news
+python scripts/run_sentiment.py --limit 20  # 2. score a small batch first
+python scripts/run_sentiment.py             #    then score the rest
+streamlit run app/dashboard.py              # 3. open the dashboard
+```
+
+The first time `run_sentiment.py` runs, it downloads FinBERT (about
+440MB, then it stays cached). Scoring is incremental: only new
+articles get scored each time you run it again.
+
+You can run the scripts more than once without breaking anything:
+prices get updated in place and articles are never added twice
+(checked by URL).
+
+### Running the tests
+
+```bash
+pytest tests/ -v
+```
+
+The tests use made-up sentiment and price numbers, so they check the
+event study logic (event detection, CAR, CAAR, the t-test) without
+needing the real database.
+
+## What works
+
+- Collecting prices for 4 tickers and news for 5 topics runs
+  end-to-end and fills the database.
+- FinBERT scoring is incremental: only new articles get scored each
+  time.
+- The event study runs on real data and gives a result I can trust,
+  because I checked the logic with unit tests on made-up numbers where
+  I know the correct answer in advance.
+- The dashboard shows price vs. sentiment and the event study results,
+  and stays readable even with almost two years of daily data.
+
+## What's limited
+
+- **Google News RSS is one, English-only source.** It probably misses
+  a lot of Korean coverage, which likely matters a lot for SK Hynix and
+  Samsung specifically.
+- **FinBERT only scores the headline, not the full article**, to keep
+  ingestion fast. This loses some nuance a full-text model would catch.
+- **The event study uses the simplest baseline (Constant Mean Return),**
+  not a Market Model that compares against an index like KOSPI or the
+  S&P 500. That would be the natural next step, kept out here because
+  it needs a consistent benchmark per ticker and wasn't necessary to
+  answer the question on a 2-year demo dataset.
+
+## Example result, and why I'm not hiding it
+
+This is the real output of `python scripts/run_event_study.py --ticker NVDA`,
+on about 2 years of data (47 sentiment spikes detected):
+
+```
+[all     ]  n=44  CAAR=-0.0132  t=-1.44  p=0.158  -> not significant
+[positive]  n=36  CAAR=-0.0227  t=-2.33  p=0.026  -> significant
+[negative]  n= 8  CAAR=+0.0293  t=+1.47  p=0.185  -> not significant
+```
+
+The overall test ("all") is not significant, which is what I expected
+going in. The "positive" sub-test alone does come out significant at
+p < 0.05 — but with a *negative* CAAR, meaning positive sentiment spikes
+were actually followed by slightly worse returns, not better ones. I'm
+not reading this as "sell the good news": I ran three sub-tests here
+(all / positive / negative), and with a 5% significance level, getting
+one result like this by chance alone is not surprising. Treating it as
+a real, tradeable effect without testing it on more data or a different
+period would be a mistake.
+
+I'm showing this instead of only the "clean" not-significant numbers
+because that's the actual point of running a statistical test: to see
+what the data says, including the part that doesn't fit a simple
+story, instead of only keeping the result that looks good.
+
+## Design choices
+
+- **Every row stores when it was collected** (`ingested_at_utc`). This
+  matters for the event study: I only want to use data I actually had
+  at that time, not data from later.
+- **RSS instead of scraping the news website**: the RSS feed is simple,
+  structured XML, and doesn't change format as often as a web page.
+- **Collecting data and scoring it are two separate steps.** New
+  articles get a `sentiment_score` of NULL first, and a second script
+  fills it in later. Collecting news never has to wait for the NLP
+  model to load.
+- **SQLite**: no server to run, and a UNIQUE constraint on the article
+  URL gives me deduplication for free.
+- **Each news feed runs on its own**, so if one of them fails, the
+  others still work.
+- **±5 trading day event window**: about a week on each side, long
+  enough to see if the market keeps reacting, short enough that an
+  unrelated news story is unlikely to land in the same window.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Author
+
+Vincent Berardi, data science master's student at EURECOM. Personal
+project to practice data collection, NLP, and basic statistics.

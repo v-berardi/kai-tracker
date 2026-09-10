@@ -1,0 +1,9 @@
+.venv/
+data/
+__pycache__/
+*.pyc
+*.db
+.pytest_cache/
+.claude/
+tout_le_code.txt
+NOTES.md

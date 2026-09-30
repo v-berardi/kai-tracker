@@ -36,6 +36,7 @@ Project layout:
 ```
 kai-tracker/
 ├── .github/workflows/tests.yml  # CI: ruff + pytest on every push
+├── .streamlit/config.toml       # dark theme for the dashboard
 ├── app/
 │   └── dashboard.py             # Streamlit + Plotly dashboard
 ├── data/                        # SQLite database (created on first run, not in git)
@@ -63,140 +64,29 @@ kai-tracker/
 └── ruff.toml                    # linter settings
 ```
 
-## How to run it
-
-```bash
-python -m venv .venv
-.venv\Scripts\Activate.ps1        # Windows (PowerShell)
-source .venv/bin/activate          # Linux / macOS
-pip install -r requirements.txt
-
-python scripts/run_ingestion.py             # 1. collect prices + news
-python scripts/run_sentiment.py --limit 20  # 2. score a small batch first
-python scripts/run_sentiment.py             #    then score the rest
-python scripts/run_event_study.py --all-tickers  # 3. results for the 4 tickers
-streamlit run app/dashboard.py              # 4. open the dashboard
-```
-
-The first time `run_sentiment.py` runs, it downloads FinBERT (about
-440MB, then it stays in the cache). Scoring is incremental: only the
-new articles are scored.
-
-The scripts can run many times without problem: prices are updated in
-place and an article is never added twice (checked by URL).
-
-Other options of the event study:
-
-```bash
-python scripts/run_event_study.py --ticker NVDA                   # details for one ticker
-python scripts/run_event_study.py --all-tickers --model constant  # old baseline, to compare
-```
-
-### Running the tests
-
-```bash
-pytest -v
-ruff check .
-```
-
-The tests use small made-up data where I know the answer in advance:
-event detection, overlapping events, the minimum number of events,
-the market model (it must find the beta I used to build the data), the
-t-test (compared with scipy), time zones, and the FinBERT metrics (an
-example computed by hand). The database tests use a temporary SQLite
-file, so the tests need no network, no model and no real database.
-GitHub Actions runs them, with the ruff linter, on every push.
-
-## Is FinBERT right on my headlines?
-
-FinBERT was trained on financial news, not on chip industry headlines
-from Google News. So I checked it on a random sample of my data:
-
-```bash
-python scripts/validate_finbert.py sample --n 50   # 50 random headlines (seed 42)
-# labels in validation/headlines_to_label.csv (see below)
-python scripts/validate_finbert.py evaluate
-```
-
-**The labels.** The rule: is this headline good or bad news for an
-investor in the company of the topic (SK Hynix for `sk_hynix_hbm`,
-Nvidia for `nvidia_supply`, ...)? If it is mixed or not clear, it is
-neutral. The labels were proposed by an LLM (Claude) with this rule,
-without seeing the FinBERT answer. This is a limit: LLM labels are not
-a perfect ground truth, so these numbers show how much FinBERT agrees
-with another reader, not its exact accuracy.
-
-**Result on 50 headlines:**
-
-```
-Accuracy:       60.0%   (95% interval: about 46% to 72%)
-Always 'positive': 42.0%  (trivial baseline)
-Cohen's kappa:  0.39
-
-Confusion matrix (rows = label, columns = FinBERT):
-          positive  negative  neutral
-positive        12         0        9
-negative         4         8        2
-neutral          4         1       10
-```
-
-FinBERT does better than the trivial baseline, but the agreement is
-only "fair" (kappa 0.39). Two kinds of errors:
-
-- **FinBERT is too careful:** 9 of the 21 good news are "neutral" for
-  it.
-- **Sometimes it gets the sign wrong:** 4 of the 14 bad news are
-  "positive" for it. FinBERT reads the tone of the sentence, but it
-  doesn't know for which company the news is good or bad. For example,
-  "Samsung to overtake SK Hynix" sounds positive, but it is bad news
-  for SK Hynix, the company of the topic.
-- When FinBERT says "negative", it is almost always right (precision
-  0.89).
-
-**What it means for the event study:** the sentiment signal is noisy,
-and some events probably have the wrong sign. This makes a real effect
-harder to find, so it is one more reason to read the "no clear link"
-result carefully. A better next step would be a model that knows the
-target company (entity-level sentiment), or FinBERT fine-tuned on
-labeled chip headlines.
-
-## What works
-
-- Collecting the prices of 4 stocks + 2 indexes and the news of 6
-  topics runs end to end and fills the database.
-- FinBERT scoring is incremental: only the new articles are scored.
-- The event study runs on real data, and I trust the logic because
-  the unit tests check it on data where I know the right answer.
-- The dashboard shows price vs sentiment and the event study results,
-  with a choice between the two baselines.
-
-## What's limited
-
-- **Google News RSS is one source, in English only.** It probably
-  misses a lot of Korean news, which matters a lot for SK Hynix and
-  Samsung.
-- **FinBERT only reads the headline, not the full article.** It is
-  faster, but a headline loses some nuance. And on my headlines it
-  only agrees "fairly" with the labels (kappa 0.39, see above).
-- **Not many events.** Google News RSS only gives around 100 recent
-  articles per query, so the news history is much shorter than the 2
-  years of prices, and it only grows if I run the ingestion often.
-  After removing the overlapping events, only 6 or 7 events are left per
-  stock, which is too few for a strong conclusion. I don't run any test
-  under 5 events.
-- **The market index contains the stock itself.** Nvidia and TSMC are
-  big parts of the SOXX ETF, and Samsung and SK Hynix are big parts of
-  the KOSPI. When Nvidia moves, the index also moves a bit because of
-  Nvidia, so the market model removes a part of Nvidia's own abnormal
-  return. A cleaner benchmark would be the index without the stock, but
-  I don't have this data for free.
-- **Samsung events are too frequent.** With the 0.25 threshold, most of
-  the Samsung trading days are inside an event window, so many events
-  have no clean baseline and are skipped. I didn't change the threshold
-  after seeing the results, to not tune the method on the data I test
-  it on.
-
 ## Results, and why I'm not hiding them
+
+### The data
+
+- **Prices:** daily prices of the 4 stocks and of the 2 indexes (SOXX
+  and KOSPI) since July 2024, from yfinance.
+- **News:** 1,265 headlines from the 6 Google News topics, all scored
+  by FinBERT. Most of them are recent, because the RSS feed only gives
+  the latest articles (the first Nvidia event is in February 2026).
+- **Events** (days with |sentiment| >= 0.25, market model):
+
+| Stock | Detected | Skipped: not enough prices | Skipped: overlap | Skipped: baseline too short | Kept |
+|---|---:|---:|---:|---:|---:|
+| Nvidia | 18 | 1 | 5 | 6 | 6 |
+| SK Hynix | 27 | 2 | 12 | 6 | 7 |
+| Samsung | 45 | 2 | 5 | 31 | 7 |
+| TSMC | 13 | 1 | 5 | 0 | 7 |
+
+An event is skipped if its window overlaps the window of the previous
+event, or if there are less than 30 "clean" days (outside any event
+window) to estimate its normal return.
+
+### Event study
 
 I ran the study on the 4 stocks with
 `python scripts/run_event_study.py --all-tickers` (market model,
@@ -261,6 +151,139 @@ I'm showing this instead of only the "clean" not-significant numbers
 because that's the actual point of running a statistical test: to see
 what the data says, including the part that doesn't fit a simple
 story, instead of only keeping the result that looks good.
+
+## Is FinBERT right on my headlines?
+
+FinBERT was trained on financial news, not on chip industry headlines
+from Google News. So I checked it on a random sample of my data:
+
+```bash
+python scripts/validate_finbert.py sample --n 50   # 50 random headlines (seed 42)
+# labels in validation/headlines_to_label.csv (see below)
+python scripts/validate_finbert.py evaluate
+```
+
+**The labels.** The rule: is this headline good or bad news for an
+investor in the company of the topic (SK Hynix for `sk_hynix_hbm`,
+Nvidia for `nvidia_supply`, ...)? If it is mixed or not clear, it is
+neutral. The labels were proposed by an LLM (Claude) with this rule,
+without seeing the FinBERT answer. This is a limit: LLM labels are not
+a perfect ground truth, so these numbers show how much FinBERT agrees
+with another reader, not its exact accuracy.
+
+**Result on 50 headlines:**
+
+```
+Accuracy:       60.0%   (95% interval: about 46% to 72%)
+Always 'positive': 42.0%  (trivial baseline)
+Cohen's kappa:  0.39
+
+Confusion matrix (rows = label, columns = FinBERT):
+          positive  negative  neutral
+positive        12         0        9
+negative         4         8        2
+neutral          4         1       10
+```
+
+FinBERT does better than the trivial baseline, but the agreement is
+only "fair" (kappa 0.39). Two kinds of errors:
+
+- **FinBERT is too careful:** 9 of the 21 good news are "neutral" for
+  it.
+- **Sometimes it gets the sign wrong:** 4 of the 14 bad news are
+  "positive" for it. FinBERT reads the tone of the sentence, but it
+  doesn't know for which company the news is good or bad. For example,
+  "Samsung to overtake SK Hynix" sounds positive, but it is bad news
+  for SK Hynix, the company of the topic.
+- When FinBERT says "negative", it is almost always right (precision
+  0.89).
+
+**What it means for the event study:** the sentiment signal is noisy,
+and some events probably have the wrong sign. This makes a real effect
+harder to find, so it is one more reason to read the "no clear link"
+result carefully. A better next step would be a model that knows the
+target company (entity-level sentiment), or FinBERT fine-tuned on
+labeled chip headlines.
+
+## How to run it
+
+```bash
+python -m venv .venv
+.venv\Scripts\Activate.ps1        # Windows (PowerShell)
+source .venv/bin/activate          # Linux / macOS
+pip install -r requirements.txt
+
+python scripts/run_ingestion.py             # 1. collect prices + news
+python scripts/run_sentiment.py --limit 20  # 2. score a small batch first
+python scripts/run_sentiment.py             #    then score the rest
+python scripts/run_event_study.py --all-tickers  # 3. results for the 4 tickers
+streamlit run app/dashboard.py              # 4. open the dashboard
+```
+
+The first time `run_sentiment.py` runs, it downloads FinBERT (about
+440MB, then it stays in the cache). Scoring is incremental: only the
+new articles are scored.
+
+The scripts can run many times without problem: prices are updated in
+place and an article is never added twice (checked by URL).
+
+Other options of the event study:
+
+```bash
+python scripts/run_event_study.py --ticker NVDA                   # details for one ticker
+python scripts/run_event_study.py --all-tickers --model constant  # old baseline, to compare
+```
+
+### Running the tests
+
+```bash
+pytest -v
+ruff check .
+```
+
+The tests use small made-up data where I know the answer in advance:
+event detection, overlapping events, the minimum number of events,
+the market model (it must find the beta I used to build the data), the
+t-test (compared with scipy), time zones, and the FinBERT metrics (an
+example computed by hand). The database tests use a temporary SQLite
+file, so the tests need no network, no model and no real database.
+GitHub Actions runs them, with the ruff linter, on every push.
+
+## What works
+
+- Collecting the prices of 4 stocks + 2 indexes and the news of 6
+  topics runs end to end and fills the database.
+- FinBERT scoring is incremental: only the new articles are scored.
+- The event study runs on real data, and I trust the logic because
+  the unit tests check it on data where I know the right answer.
+- The dashboard shows price vs sentiment and the event study results,
+  with a choice between the two baselines.
+
+## What's limited
+
+- **Google News RSS is one source, in English only.** It probably
+  misses a lot of Korean news, which matters a lot for SK Hynix and
+  Samsung.
+- **FinBERT only reads the headline, not the full article.** It is
+  faster, but a headline loses some nuance. And on my headlines it
+  only agrees "fairly" with the labels (kappa 0.39, see above).
+- **Not many events.** Google News RSS only gives around 100 recent
+  articles per query, so the news history is much shorter than the 2
+  years of prices, and it only grows if I run the ingestion often.
+  After removing the overlapping events, only 6 or 7 events are left per
+  stock, which is too few for a strong conclusion. I don't run any test
+  under 5 events.
+- **The market index contains the stock itself.** Nvidia and TSMC are
+  big parts of the SOXX ETF, and Samsung and SK Hynix are big parts of
+  the KOSPI. When Nvidia moves, the index also moves a bit because of
+  Nvidia, so the market model removes a part of Nvidia's own abnormal
+  return. A cleaner benchmark would be the index without the stock, but
+  I don't have this data for free.
+- **Samsung events are too frequent.** With the 0.25 threshold, most of
+  the Samsung trading days are inside an event window, so many events
+  have no clean baseline and are skipped. I didn't change the threshold
+  after seeing the results, to not tune the method on the data I test
+  it on.
 
 ## Design choices
 

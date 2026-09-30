@@ -138,9 +138,11 @@ story, instead of only keeping the result that looks good.
 
 ## Design choices
 
-- **Every row stores when it was collected** (`ingested_at_utc`). This
-  matters for the event study: I only want to use data I actually had
-  at that time, not data from later.
+- **Every row stores when it was last written** (`ingested_at_utc`).
+  For news it is when I collected the article. For prices it is the
+  last update, because prices are rewritten at each run (yfinance
+  changes old adjusted prices after splits and dividends). I use it
+  only to check the data, the event study doesn't use it.
 - **RSS instead of scraping the news website**: the RSS feed is simple,
   structured XML, and doesn't change format as often as a web page.
 - **Collecting data and scoring it are two separate steps.** New

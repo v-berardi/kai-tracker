@@ -1,9 +1,12 @@
 """Functions to save data to and read data from the SQLite database.
 
 Two things to know about the schema:
-- Every row stores `ingested_at_utc`, the time we collected it. This
-  matters for the event study: we only want to use data that we actually
-  had at the time, not data from later.
+- Every row has `ingested_at_utc`, the last time the row was written.
+  For news it is when I collected the article (news rows are never
+  updated). For prices it is the last update, because prices are
+  rewritten at each run (yfinance changes the old adjusted prices after
+  a split or a dividend). I only use this column to check the data, the
+  event study does not use it.
 - `sentiment_score` starts as NULL when a news row is added. It gets
   filled in later by a separate script, so collecting news never has to
   wait for the NLP model to load.

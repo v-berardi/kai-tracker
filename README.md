@@ -165,6 +165,12 @@ story, instead of only keeping the result that looks good.
 - **±5 trading day event window**: about a week on each side, long
   enough to see if the market keeps reacting, short enough that an
   unrelated news story is unlikely to land in the same window.
+- **Events do not overlap.** The t-test supposes that the events are
+  independent. If two event windows share some days, the same returns
+  are counted two times and the test looks more significant than it
+  really is. So I skip an event if it starts inside the window of the
+  previous one, and I remove the event window days from the "normal
+  return" of the other events.
 
 ## License
 

@@ -106,6 +106,46 @@ def test_compute_cars_skips_events_without_enough_history():
     assert cars.empty
 
 
+def _events_at(fake: pd.DataFrame, indexes: list[int]) -> pd.DataFrame:
+    """Build positive events on the given trading day indexes."""
+    return pd.DataFrame({
+        "date": [fake["date"].iloc[i] for i in indexes],
+        "avg_score": [0.5] * len(indexes),
+        "n_articles": [3] * len(indexes),
+        "direction": ["positive"] * len(indexes),
+    })
+
+
+def test_compute_cars_skips_overlapping_events(monkeypatch):
+    fake = _fake_prices([0.0] * 300)
+    monkeypatch.setattr(es, "_load_prices", lambda ticker: fake)
+
+    # 150 and 155 are only 5 trading days apart, so their windows overlap.
+    # 170 is 20 days after 150, no overlap, so it is kept.
+    events = _events_at(fake, [150, 155, 170])
+    cars = es.compute_cars("FAKE", events)
+
+    kept = cars["event_date"].tolist()
+    assert kept == [fake["date"].iloc[150], fake["date"].iloc[170]]
+
+
+def test_compute_cars_leaves_other_event_windows_out_of_the_baseline(monkeypatch):
+    returns = [0.0] * 300
+    returns[130] = 0.5          # big move on the day of the first event
+    fake = _fake_prices(returns)
+    monkeypatch.setattr(es, "_load_prices", lambda ticker: fake)
+
+    # the estimation window of the 2nd event (day 180) is days 60-159,
+    # and the window of the 1st event (days 125-135) is inside it.
+    events = _events_at(fake, [130, 180])
+    cars = es.compute_cars("FAKE", events)
+
+    assert len(cars) == 2
+    assert cars.iloc[0]["car"] == pytest.approx(0.5)
+    # before the fix, the 0.5 move was going into the 2nd "normal" return
+    assert cars.iloc[1]["normal_return"] == pytest.approx(0.0)
+
+
 # --- aggregate ---
 
 def test_aggregate_computes_caar_and_flags_significance():

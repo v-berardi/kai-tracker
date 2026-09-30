@@ -27,6 +27,10 @@ followed by unusual stock returns. Steps:
      if the market keeps reacting after the news, short enough that a
      different, unrelated news story is unlikely to land in the same
      window and confuse the result.
+     The events must be independent: if the window of an event overlaps
+     the previous one, I skip it, and the days inside event windows are
+     removed from the estimation window of the other events (see
+     compute_cars).
 
   4. RESULT:
      CAAR = average CAR across all events.
@@ -129,6 +133,7 @@ def compute_cars(
     events: pd.DataFrame,
     estimation_window: tuple[int, int] = (-120, -21),
     event_window: tuple[int, int] = (-5, 5),
+    min_estimation_days: int = 60,
 ) -> pd.DataFrame:
     """Compute the CAR (Cumulative Abnormal Return) for each event.
 
@@ -138,37 +143,69 @@ def compute_cars(
     The windows count trading days, not calendar days. This matters: if
     an event happens on a Friday, the next day in the window is the
     following Monday, not the actual Saturday.
+
+    Two rules so that the events stay independent:
+    - No overlap: if an event starts less than one event window after the
+      last kept event, I skip it. If not, the same days are counted in
+      two CARs, the CARs are not independent anymore and the t-test looks
+      more significant than it really is.
+    - Clean baseline: I remove the days inside any event window from the
+      estimation window of the other events, so the reaction to one news
+      does not change the "normal" return of another event.
+      min_estimation_days = minimum number of clean days I need.
     """
     prices = _load_prices(ticker)
     trading_dates = prices["date"].values          # numpy datetime64
     returns = prices["ret"].values
+    n_days = len(trading_dates)
 
     ev_len = event_window[1] - event_window[0] + 1  # number of days in the window
-    results = []
 
-    for _, event in events.iterrows():
+    # 1. find the trading day of each event
+    positions: list[tuple[int, pd.Series]] = []
+    for _, event in events.sort_values("date").iterrows():
         event_dt = np.datetime64(event["date"], "ns")
-
         # index of the closest trading day on/after the event date
         idx = int(np.searchsorted(trading_dates, event_dt))
-        if idx >= len(trading_dates):
+        if idx >= n_days:
             logger.debug("Event %s out of range, skipped", event["date"].date())
             continue
+        positions.append((idx, event))
 
+    # 2. mark all the days inside an event window (for the clean baseline)
+    in_event_window = np.zeros(n_days, dtype=bool)
+    for idx, _ in positions:
+        start = max(idx + event_window[0], 0)
+        in_event_window[start : idx + event_window[1] + 1] = True
+
+    # 3. CAR of each event with enough data and no overlap
+    results = []
+    last_kept_idx: int | None = None
+
+    for idx, event in positions:
         est_s = idx + estimation_window[0]
         est_e = idx + estimation_window[1]
         ev_s  = idx + event_window[0]
         ev_e  = idx + event_window[1]
 
-        if est_s < 0 or ev_e >= len(trading_dates):
+        if est_s < 0 or ev_e >= n_days:
             logger.debug("Not enough data for event %s, skipped", event["date"].date())
             continue
 
-        normal_ret = returns[est_s : est_e + 1].mean()
-        ev_returns = returns[ev_s : ev_e + 1]
-
-        if len(ev_returns) < ev_len:
+        if last_kept_idx is not None and idx - last_kept_idx < ev_len:
+            logger.debug("Event %s overlaps the previous event window, skipped",
+                         event["date"].date())
             continue
+
+        est_returns = returns[est_s : est_e + 1]
+        clean = est_returns[~in_event_window[est_s : est_e + 1]]
+        if len(clean) < min_estimation_days:
+            logger.debug("Event %s: only %d clean estimation days, skipped",
+                         event["date"].date(), len(clean))
+            continue
+
+        normal_ret = clean.mean()
+        ev_returns = returns[ev_s : ev_e + 1]
 
         ar = ev_returns - normal_ret          # Abnormal Return, per day
         car = float(ar.sum())                 # Cumulative Abnormal Return
@@ -181,6 +218,7 @@ def compute_cars(
             "car": car,
             "ar_series": ar.tolist(),
         })
+        last_kept_idx = idx
 
     return pd.DataFrame(results)
 

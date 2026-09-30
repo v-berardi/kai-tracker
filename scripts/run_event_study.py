@@ -66,7 +66,7 @@ def run_one(args, query_tags: list[str] | None) -> None:
 
     for direction, res in results.items():
         if res is None:
-            print(f"[{direction:8s}] Not enough events for a test.\n")
+            print(f"[{direction:8s}] Less than 5 events, no test.\n")
             continue
         print(f"[{direction:8s}]  n={res.n_events}")
         # "after" is the real question: do returns move AFTER the news?
@@ -105,7 +105,7 @@ def run_all(args, all_topics: bool) -> None:
         for direction in DIRECTIONS:
             res = results.get(direction)
             if res is None:
-                rows.append({"ticker": ticker, "group": direction, "n": 0})
+                rows.append({"ticker": ticker, "group": direction, "n": "<5"})
                 continue
             rows.append({
                 "ticker": ticker, "group": direction, "n": res.n_events,
@@ -144,6 +144,7 @@ def run_all(args, all_topics: bool) -> None:
     print(f"\n{n_tests} tests in total. p < 0.05: {n_raw} "
           f"(about {0.05 * n_tests:.1f} expected by chance only).")
     print(f"With the Bonferroni correction (p < {limit:.4f}): {n_bonf}.")
+    print("Groups with less than 5 events have no test (n = <5).")
     print()
 
 

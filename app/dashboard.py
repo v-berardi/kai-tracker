@@ -275,10 +275,11 @@ just means this signal is not strong enough to prove anything on its own.
     with st.spinner("Computing..."):
         results = load_event_study(ticker, query_tags, threshold, model)
 
-    if not results:
+    if not results or results.get("all") is None:
         st.warning(
-            "Not enough data. Try lowering the sentiment threshold in the "
-            "sidebar, or run the ingestion and scoring scripts again."
+            "Not enough events for a test (minimum 5). Try lowering the "
+            "sentiment threshold in the sidebar, or run the ingestion and "
+            "scoring scripts again."
         )
         st.stop()
 

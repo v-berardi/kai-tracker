@@ -153,27 +153,29 @@ def test_compute_cars_leaves_other_event_windows_out_of_the_baseline(monkeypatch
 # --- aggregate ---
 
 def test_aggregate_computes_caar_and_flags_significance():
-    # three events with the exact same AR pattern for every day
+    # five events with the exact same AR pattern for every day
     ar_series = [0.01] * 11  # 11 days in the [-5, +5] window
     cars = pd.DataFrame({
-        "event_date": pd.to_datetime(["2026-01-01", "2026-02-01", "2026-03-01"]),
-        "direction": ["positive", "positive", "positive"],
-        "avg_score": [0.5, 0.6, 0.55],
-        "normal_return": [0.0, 0.0, 0.0],
-        "car": [0.11, 0.11, 0.11],
-        "car_pre": [0.05, 0.05, 0.05],     # 5 days before the event
-        "car_post": [0.06, 0.06, 0.06],    # event day + 5 days after
-        "ar_series": [ar_series, ar_series, ar_series],
+        "event_date": pd.date_range("2026-01-01", periods=5, freq="MS"),
+        "direction": ["positive"] * 5,
+        "avg_score": [0.5, 0.6, 0.55, 0.5, 0.7],
+        "normal_return": [0.0] * 5,
+        "car": [0.11] * 5,
+        "car_pre": [0.05] * 5,     # 5 days before the event
+        "car_post": [0.06] * 5,    # event day + 5 days after
+        "ar_series": [ar_series] * 5,
     })
 
     result = es.aggregate(cars, event_window=(-5, 5), direction="all", ticker="FAKE")
 
     assert result is not None
-    assert result.n_events == 3
+    assert result.n_events == 5
     assert result.caar == pytest.approx(0.11)
-    # all three CAR values are identical, so there is no variance
-    # aggregate() handles this by returning t_stat = 0.0 instead of dividing by zero
-    assert result.t_stat == 0.0
+    # all five CAR values are identical, so there is no variance and the
+    # t-test is not defined: aggregate() returns NaN instead of a fake number
+    # (with floats the std here is about 1e-18, not exactly 0)
+    assert np.isnan(result.t_stat)
+    assert np.isnan(result.p_value)
 
 
 def test_aggregate_returns_none_with_too_few_events():
@@ -189,6 +191,21 @@ def test_aggregate_returns_none_with_too_few_events():
     })
 
     assert es.aggregate(cars, direction="all", ticker="FAKE") is None
+
+
+def test_aggregate_needs_at_least_min_events():
+    cars = pd.DataFrame({
+        "event_date": pd.date_range("2026-01-01", periods=4, freq="MS"),
+        "direction": ["positive"] * 4,
+        "avg_score": [0.5] * 4,
+        "normal_return": [0.0] * 4,
+        "car": [0.01, 0.02, 0.03, 0.04],
+        "car_pre": [0.0] * 4,
+        "car_post": [0.01, 0.02, 0.03, 0.04],
+        "ar_series": [[0.0] * 11] * 4,
+    })
+    assert es.aggregate(cars, direction="all", ticker="FAKE") is None      # 4 < 5
+    assert es.aggregate(cars, direction="all", ticker="FAKE", min_events=4) is not None
 
 
 def test_aggregate_t_test_matches_scipy():

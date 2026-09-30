@@ -49,6 +49,8 @@ followed by unusual stock returns. Steps:
      talk about a move that already happened ("Nvidia shares jump"), so
      a big "before" CAR means the news follows the price and not the
      opposite.
+     There is no test under 5 events (a p-value on 2 events means
+     nothing).
 
 What we expect: the t-test probably will NOT be significant, because a
 daily news sentiment score is not a proven trading signal by itself.
@@ -313,13 +315,17 @@ def _t_test(values: np.ndarray) -> tuple[float, float, float]:
     """One sample t-test, H0: mean = 0. Returns (mean, t_stat, p_value).
 
     t = mean / (std / sqrt(n)), with n - 1 degrees of freedom.
-    If all the values are equal, std = 0 and we can't compute t, so I
-    return t = 0 to not divide by zero.
+    If all the values are equal, std = 0 and t is not defined, so I
+    return NaN for t and p (no answer, instead of a fake "no effect").
+    I compare std to a small tolerance and not to 0: with floats, the
+    std of equal values can be 1e-18 instead of exactly 0.
     """
     n = len(values)
     mean = float(values.mean())
-    se = float(values.std(ddof=1) / np.sqrt(n))
-    t_stat = mean / se if se > 0 else 0.0
+    std = float(values.std(ddof=1))
+    if std < 1e-12:
+        return mean, float("nan"), float("nan")
+    t_stat = mean / (std / np.sqrt(n))
     p_value = float(2 * (1 - stats.t.cdf(abs(t_stat), df=n - 1)))
     return mean, t_stat, p_value
 
@@ -329,6 +335,7 @@ def aggregate(
     event_window: tuple[int, int] = (-5, 5),
     direction: str = "all",
     ticker: str = "",
+    min_events: int = 5,
 ) -> StudyResult | None:
     """Compute CAAR, t-stat, and p-value across all events.
 
@@ -336,11 +343,16 @@ def aggregate(
     three times: on the full window, before the event and after it.
     If p < 0.05, the result is called significant. Based on the
     limitations of this method, we expect it usually will NOT be.
+
+    min_events: under this number of events, I don't run any test. A
+    p-value computed on 2 or 3 events means nothing, so it is better to
+    show no number than a misleading one.
     """
     sub = cars if direction == "all" else cars[cars["direction"] == direction]
     n = len(sub)
-    if n < 2:
-        logger.warning("Too few events (%d) to run a statistical test.", n)
+    if n < min_events:
+        logger.warning("[%s | %s] only %d events (minimum %d), no test.",
+                       ticker, direction, n, min_events)
         return None
 
     caar, t_stat, p_value = _t_test(sub["car"].values)

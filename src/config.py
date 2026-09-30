@@ -46,6 +46,18 @@ TICKER_TOPICS = {
     "TSM": ["tsmc_cowos"],
 }
 
+# --- Time zone and closing time of the exchange, for each ticker ---
+# News times are in UTC, but each stock trades in its own time zone.
+# If a headline comes out after the close, the price can only react the
+# next trading day, so I need the local time.
+# (pandas handles summer time by itself with these time zone names)
+MARKET_HOURS = {
+    "NVDA": ("America/New_York", "16:00"),
+    "TSM": ("America/New_York", "16:00"),        # ADR, it trades in New York
+    "000660.KS": ("Asia/Seoul", "15:30"),
+    "005930.KS": ("Asia/Seoul", "15:30"),
+}
+
 GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
 GOOGLE_NEWS_PARAMS = {"hl": "en-US", "gl": "US", "ceid": "US:en"}
 

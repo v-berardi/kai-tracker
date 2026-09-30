@@ -54,8 +54,9 @@ def load_prices(ticker: str) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=300)
-def load_sentiment(query_tags: tuple[str, ...]) -> pd.DataFrame:
-    return daily_sentiment(list(query_tags))
+def load_sentiment(query_tags: tuple[str, ...], ticker: str) -> pd.DataFrame:
+    # days of the ticker's exchange (news after the close -> next day)
+    return daily_sentiment(list(query_tags), ticker=ticker)
 
 
 @st.cache_data(ttl=300)
@@ -145,7 +146,7 @@ tab_chart, tab_study = st.tabs(["Price vs Sentiment", "Event study"])
 # Tab 1: Price vs Sentiment
 with tab_chart:
     prices = load_prices(ticker)
-    sentiment = load_sentiment(query_tags)
+    sentiment = load_sentiment(query_tags, ticker)
 
     if prices.empty:
         st.warning(f"No price data for {ticker}.")

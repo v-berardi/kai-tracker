@@ -52,9 +52,33 @@ def test_daily_sentiment_filters_by_topics(temp_db):
     assert everything["n_articles"].tolist() == [2]
 
 
+def test_daily_sentiment_uses_the_exchange_trading_day(temp_db):
+    # Monday 2026-01-05, winter time: New York = UTC-5, Seoul = UTC+9
+    _add_scored_news([
+        # 03:00 UTC = Mon 12:00 in Seoul (market open)
+        #           = Sun 22:00 in New York (after Sunday "close") -> Monday
+        ("a", "2026-01-05T03:00:00+00:00", 0.1),
+        # 07:00 UTC = Mon 16:00 in Seoul (after the 15:30 close) -> Tuesday
+        #           = Mon 02:00 in New York (before the open) -> Monday
+        ("a", "2026-01-05T07:00:00+00:00", 0.2),
+        # 22:00 UTC = Tue 07:00 in Seoul (before the open) -> Tuesday
+        #           = Mon 17:00 in New York (after the 16:00 close) -> Tuesday
+        ("a", "2026-01-05T22:00:00+00:00", 0.3),
+    ])
+
+    def days(ticker):
+        df = db.daily_sentiment(ticker=ticker)
+        return dict(zip(df["date"], df["n_articles"]))
+
+    assert days("NVDA") == {"2026-01-05": 2, "2026-01-06": 1}
+    assert days("000660.KS") == {"2026-01-05": 1, "2026-01-06": 2}
+    assert days(None) == {"2026-01-05": 3}   # just the UTC dates
+
+
 def test_every_ticker_has_valid_topics():
     for ticker in config.TICKERS:
         topics = config.TICKER_TOPICS.get(ticker)
         assert topics, f"{ticker} has no news topics"
         for tag in topics:
             assert tag in config.NEWS_QUERIES, f"unknown topic {tag}"
+        assert ticker in config.MARKET_HOURS, f"{ticker} has no market hours"

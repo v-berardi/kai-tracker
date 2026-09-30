@@ -254,7 +254,7 @@ def run(
         query_tags = TICKER_TOPICS.get(ticker)
     logger.info("News topics used for %s: %s", ticker, query_tags or "all")
 
-    sentiment = daily_sentiment(query_tags)
+    sentiment = daily_sentiment(query_tags, ticker=ticker)
     if sentiment.empty:
         logger.warning("No sentiment data in the database (topics=%s).", query_tags)
         return {}

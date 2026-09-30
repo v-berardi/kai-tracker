@@ -147,6 +147,11 @@ story, instead of only keeping the result that looks good.
   `src/config.py`). At first all the topics were mixed together, so a
   headline about Samsung could create an event that was then tested on
   Nvidia's price. Now the Nvidia study only uses the Nvidia topic.
+- **News is matched to the right trading day.** News times are in UTC,
+  but Nvidia trades in New York and SK Hynix in Seoul. I convert each
+  headline to the local time of the exchange, and if it comes out after
+  the market close, it counts for the next trading day (`MARKET_HOURS`
+  in `src/config.py`).
 - **RSS instead of scraping the news website**: the RSS feed is simple,
   structured XML, and doesn't change format as often as a web page.
 - **Collecting data and scoring it are two separate steps.** New

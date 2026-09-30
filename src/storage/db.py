@@ -20,7 +20,7 @@ from typing import Iterator
 
 import pandas as pd
 
-from src.config import DB_PATH, DATA_DIR
+from src.config import DB_PATH, DATA_DIR, MARKET_HOURS
 
 logger = logging.getLogger(__name__)
 
@@ -136,12 +136,23 @@ def update_sentiment(rows: list[tuple[float, str, int]]) -> int:
     return len(rows)
 
 
-def daily_sentiment(query_tags: list[str] | str | None = None) -> pd.DataFrame:
-    """Average sentiment per PUBLICATION day (not the day we collected it).
+def daily_sentiment(
+    query_tags: list[str] | str | None = None,
+    ticker: str | None = None,
+) -> pd.DataFrame:
+    """Average sentiment per day, based on the PUBLICATION time of the
+    articles (not the time I collected them).
 
-    query_tags: one topic, a list of topics, or None for all topics.
-    Returns: date, avg_score, n_articles. This is the time series shown
-    next to prices in the dashboard.
+    query_tags: one topic, a list of topics, or None for all the topics.
+    ticker: if given, each article goes to the first trading day where
+      the stock can react to it:
+        - I convert the publication time to the local time of the exchange
+        - if the article comes out after the close, it counts for the next day
+      Weekends and holidays are handled later in the event study (a day
+      without trading goes to the next trading day).
+      If ticker is None, I just use the UTC date.
+
+    Returns: date (YYYY-MM-DD), avg_score, n_articles.
     """
     if isinstance(query_tags, str):
         query_tags = [query_tags]
@@ -153,15 +164,37 @@ def daily_sentiment(query_tags: list[str] | str | None = None) -> pd.DataFrame:
         placeholders = ", ".join("?" for _ in query_tags)
         where += f" AND query_tag IN ({placeholders})"
         params = tuple(query_tags)
-    sql = f"""
-        SELECT substr(published_utc, 1, 10) AS date,
-               AVG(sentiment_score)          AS avg_score,
-               COUNT(*)                      AS n_articles
-        FROM news {where}
-        GROUP BY date ORDER BY date
-    """
+    sql = f"SELECT published_utc, sentiment_score FROM news {where}"
     with get_connection() as conn:
-        return pd.read_sql_query(sql, conn, params=params)
+        df = pd.read_sql_query(sql, conn, params=params)
+
+    if df.empty:
+        return pd.DataFrame(columns=["date", "avg_score", "n_articles"])
+
+    published = pd.to_datetime(df["published_utc"], utc=True, format="ISO8601")
+
+    market = MARKET_HOURS.get(ticker) if ticker else None
+    if ticker and market is None:
+        logger.warning("No market hours for %s, using UTC dates.", ticker)
+
+    if market:
+        tz_name, close_time = market
+        local = published.dt.tz_convert(tz_name)
+        day = local.dt.normalize().dt.tz_localize(None)   # local date, without the time zone
+        after_close = local.dt.strftime("%H:%M") >= close_time
+        day = day + pd.to_timedelta(after_close.astype(int), unit="D")
+    else:
+        day = published.dt.tz_localize(None).dt.normalize()
+
+    df["date"] = day.dt.strftime("%Y-%m-%d")
+    return (
+        df.groupby("date")
+        .agg(avg_score=("sentiment_score", "mean"),
+             n_articles=("sentiment_score", "size"))
+        .reset_index()
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
 
 
 def insert_news(items: list[dict]) -> int:

@@ -25,7 +25,7 @@ import streamlit as st                                          # noqa: E402
 from plotly.subplots import make_subplots                       # noqa: E402
 
 from src.analysis.event_study import run as run_study           # noqa: E402
-from src.config import TICKERS, NEWS_QUERIES, TICKER_TOPICS     # noqa: E402
+from src.config import BENCHMARKS, NEWS_QUERIES, TICKERS, TICKER_TOPICS  # noqa: E402
 from src.storage.db import get_connection, daily_sentiment      # noqa: E402
 
 st.set_page_config(
@@ -84,9 +84,11 @@ def load_stats() -> dict:
 
 
 @st.cache_data(ttl=300)
-def load_event_study(ticker: str, query_tags: tuple[str, ...], threshold: float) -> dict:
+def load_event_study(ticker: str, query_tags: tuple[str, ...], threshold: float,
+                     model: str) -> dict:
     """Run the event study and return the results."""
-    return run_study(ticker=ticker, query_tags=list(query_tags), threshold=threshold)
+    return run_study(ticker=ticker, query_tags=list(query_tags),
+                     threshold=threshold, model=model)
 
 
 # Sidebar
@@ -121,6 +123,15 @@ with st.sidebar:
         help="An event is a day where |avg score| exceeds this value. "
              "Lower threshold means more events.",
     )
+    model_label = st.radio(
+        "Normal return model",
+        ["Market model", "Constant mean"],
+        help="Market model: the stock is compared to its market index "
+             f"({BENCHMARKS[ticker]} for this ticker). Constant mean: the "
+             "average return of the stock, simpler but biased when the "
+             "stock has a trend.",
+    )
+    model = "market" if model_label == "Market model" else "constant"
 
     st.divider()
     st.markdown(
@@ -236,10 +247,14 @@ stock return in the days after.
 **Steps:**
 1. **Events** = days where the average FinBERT sentiment crosses the
    threshold. A 5-day cooldown avoids counting the same news story twice.
-2. **Estimation window** [-120, -21]: the "normal" return is just the
-   average daily return over the ~100 trading days before the event.
-   A more advanced version would compare against a market index instead,
-   but the simple average is enough to answer the question here.
+2. **Estimation window** [-120, -21]: this is used to find the "normal"
+   return, over the ~100 trading days before the event.
+   - *Market model* (default): a linear regression
+     `stock return = alpha + beta * index return`. The normal return of
+     a day is then alpha + beta × the index return of that day, so a day
+     where the whole market goes up is not counted as abnormal.
+   - *Constant mean*: just the average daily return of the stock. It is
+     biased when the stock has a trend, I keep it to compare.
 3. **Event window** [-5, +5]: *Abnormal Return* (AR) = actual return
    minus normal return. *CAR* = sum of AR over the window.
 4. **CAAR** = average CAR across all events.
@@ -255,7 +270,7 @@ just means this signal is not strong enough to prove anything on its own.
         """)
 
     with st.spinner("Computing..."):
-        results = load_event_study(ticker, query_tags, threshold)
+        results = load_event_study(ticker, query_tags, threshold, model)
 
     if not results:
         st.warning(
@@ -367,13 +382,16 @@ just means this signal is not strong enough to prove anything on its own.
     st.markdown("**Detected events**")
 
     if res_all and not res_all.events_df.empty:
-        ev = res_all.events_df[["event_date", "direction", "avg_score", "normal_return",
-                                "car_pre", "car_post", "car"]].copy()
+        ev = res_all.events_df[["event_date", "direction", "avg_score", "beta",
+                                "normal_return", "car_pre", "car_post", "car"]].copy()
+        if model != "market":
+            ev = ev.drop(columns=["beta"])   # beta only exists in the market model
         ev["event_date"] = ev["event_date"].dt.strftime("%Y-%m-%d")
         ev["direction"] = ev["direction"].map({"positive": "🟢 positive", "negative": "🔴 negative"})
         ev = ev.rename(columns={
             "event_date": "Date", "direction": "Direction",
-            "avg_score": "Sentiment score", "normal_return": "Normal return",
+            "avg_score": "Sentiment score", "beta": "Beta",
+            "normal_return": "Normal return",
             "car_pre": "CAR [-5,-1]", "car_post": "CAR [0,+5]",
             "car": "CAR [-5,+5]",
         })
@@ -383,6 +401,7 @@ just means this signal is not strong enough to prove anything on its own.
             hide_index=True,
             column_config={
                 "Sentiment score":  st.column_config.NumberColumn(format="%+.3f"),
+                "Beta":          st.column_config.NumberColumn(format="%.2f"),
                 "Normal return": st.column_config.NumberColumn(format="%+.4f"),
                 "CAR [-5,-1]":      st.column_config.NumberColumn(format="%+.4f"),
                 "CAR [0,+5]":       st.column_config.NumberColumn(format="%+.4f"),

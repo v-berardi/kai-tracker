@@ -10,14 +10,19 @@ followed by unusual stock returns. Steps:
 
   2. ESTIMATION WINDOW [-120, -21] (about 100 trading days before the
      event): this is used to compute what a "normal" daily return looks
-     like for this stock, using the simplest method there is:
-       normal_return = average of daily returns over that period
-     A more advanced method exists (comparing the stock to a market
-     index instead of just its own average), but the simple average is
-     enough to answer the question here. The window stops 21 days
-     before the event (not right up to day -1) so that any price
-     run-up just before the news doesn't leak into the "normal"
-     baseline and make the event look smaller than it is.
+     like for this stock. There are two models:
+       - market model (default): I fit a linear regression
+           stock_return = alpha + beta * index_return
+         on the estimation window. Then the normal return of a day in
+         the event window is alpha + beta * (index return of that day).
+         So if the whole market goes up, it is not counted as abnormal.
+       - constant mean (older, simpler): normal_return = average of the
+         daily returns over the estimation window. Its problem: if the
+         stock was going down during this period, any rebound later looks
+         "abnormal", even with no news. I keep it only to compare.
+     The window stops 21 days before the event (not right up to day -1)
+     so that any price run-up just before the news doesn't leak into
+     the "normal" baseline and make the event look smaller than it is.
 
   3. EVENT WINDOW [-5, +5] (11 trading days around the event):
      Abnormal Return (AR) = actual return - normal return, for each day.
@@ -57,7 +62,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from src.config import TICKER_TOPICS
+from src.config import BENCHMARKS, TICKER_TOPICS
 from src.storage.db import daily_sentiment, get_connection
 
 logger = logging.getLogger(__name__)
@@ -142,18 +147,50 @@ def _load_prices(ticker: str) -> pd.DataFrame:
     return df.dropna(subset=["ret"]).reset_index(drop=True)
 
 
+def _load_returns(ticker: str, benchmark: str | None = None) -> pd.DataFrame:
+    """Daily returns of the stock ("ret") and of its index ("ret_m").
+
+    Without benchmark, only "ret" (for the constant mean model).
+    With a benchmark, I first keep only the days where both have a price,
+    and I compute the returns after that. If I compute them before, a day
+    missing for one of the two would give returns over different periods.
+    """
+    stock = _load_prices(ticker)
+    if benchmark is None:
+        return stock[["date", "ret"]]
+    try:
+        market = _load_prices(benchmark)
+    except ValueError:
+        raise ValueError(
+            f"No prices for the index {benchmark}. Run "
+            f"scripts/run_ingestion.py again to download it."
+        ) from None
+    df = stock[["date", "close"]].merge(
+        market[["date", "close"]], on="date", suffixes=("", "_m")
+    )
+    df["ret"] = df["close"].pct_change()
+    df["ret_m"] = df["close_m"].pct_change()
+    return df.dropna(subset=["ret", "ret_m"]).reset_index(drop=True)
+
+
 def compute_cars(
     ticker: str,
     events: pd.DataFrame,
     estimation_window: tuple[int, int] = (-120, -21),
     event_window: tuple[int, int] = (-5, 5),
     min_estimation_days: int = 30,
+    benchmark: str | None = None,
 ) -> pd.DataFrame:
     """Compute the CAR (Cumulative Abnormal Return) for each event.
 
+    benchmark: ticker of the market index. If given, I use the market
+    model, if None the constant mean model.
+
     Returns a DataFrame with: event_date, direction, avg_score,
-    normal_return, car (full window), car_pre (days before the event),
-    car_post (event day and after), ar_series (the AR value for each day).
+    normal_return (average normal return per day in the event window),
+    beta (market model only, NaN otherwise), car (full window),
+    car_pre (days before the event), car_post (event day and after),
+    ar_series (the AR value for each day).
 
     The windows count trading days, not calendar days. This matters: if
     an event happens on a Friday, the next day in the window is the
@@ -170,9 +207,10 @@ def compute_cars(
       min_estimation_days = minimum number of clean days I need
       (30 days is a usual minimum to estimate a mean).
     """
-    prices = _load_prices(ticker)
+    prices = _load_returns(ticker, benchmark)
     trading_dates = prices["date"].values          # numpy datetime64
     returns = prices["ret"].values
+    market_returns = prices["ret_m"].values if benchmark else None
     n_days = len(trading_dates)
 
     ev_len = event_window[1] - event_window[0] + 1  # number of days in the window
@@ -225,16 +263,26 @@ def compute_cars(
             skipped["overlap"] += 1
             continue
 
-        est_returns = returns[est_s : est_e + 1]
-        clean = est_returns[~in_event_window[est_s : est_e + 1]]
+        clean_days = ~in_event_window[est_s : est_e + 1]
+        clean = returns[est_s : est_e + 1][clean_days]
         if len(clean) < min_estimation_days:
             logger.debug("Event %s: only %d clean estimation days, skipped",
                          event["date"].date(), len(clean))
             skipped["baseline too short"] += 1
             continue
 
-        normal_ret = clean.mean()
         ev_returns = returns[ev_s : ev_e + 1]
+
+        if benchmark:
+            # market model: linear regression of the stock on the index
+            # (np.polyfit with degree 1 = ordinary least squares)
+            clean_m = market_returns[est_s : est_e + 1][clean_days]
+            beta, alpha = np.polyfit(clean_m, clean, 1)
+            normal_ret = alpha + beta * market_returns[ev_s : ev_e + 1]
+        else:
+            # constant mean: the same normal return for every day
+            beta = np.nan
+            normal_ret = np.full(ev_len, clean.mean())
 
         ar = ev_returns - normal_ret          # Abnormal Return, per day
         car = float(ar.sum())                 # Cumulative Abnormal Return
@@ -243,7 +291,8 @@ def compute_cars(
             "event_date": event["date"],
             "direction": event["direction"],
             "avg_score": event["avg_score"],
-            "normal_return": float(normal_ret),
+            "normal_return": float(normal_ret.mean()),
+            "beta": float(beta),
             "car": car,
             "car_pre": float(ar[:n_pre].sum()),
             "car_post": float(ar[n_pre:].sum()),
@@ -333,16 +382,26 @@ def run(
     min_articles: int = 2,
     estimation_window: tuple[int, int] = (-120, -21),
     event_window: tuple[int, int] = (-5, 5),
+    model: str = "market",
 ) -> dict[str, StudyResult | None]:
     """Run the full event study for one ticker.
 
     query_tags: the news topics to use. If None, I take the topics of
     this ticker in config.TICKER_TOPICS, so the events come from news
     about this company and not about another one.
+    model: "market" (compare to the index in config.BENCHMARKS) or
+    "constant" (average return of the stock).
 
     Returns a dict {direction: StudyResult} with keys
     'positive', 'negative', 'all'.
     """
+    if model not in ("market", "constant"):
+        raise ValueError(f"Unknown model: {model} (use 'market' or 'constant')")
+    benchmark = BENCHMARKS.get(ticker) if model == "market" else None
+    if model == "market" and benchmark is None:
+        raise ValueError(f"No index for {ticker} in BENCHMARKS (config.py)")
+    logger.info("Model: %s%s", model, f" (index: {benchmark})" if benchmark else "")
+
     if query_tags is None:
         query_tags = TICKER_TOPICS.get(ticker)
     logger.info("News topics used for %s: %s", ticker, query_tags or "all")
@@ -359,7 +418,8 @@ def run(
 
     logger.info("%d events detected for %s", len(events), ticker)
 
-    cars = compute_cars(ticker, events, estimation_window, event_window)
+    cars = compute_cars(ticker, events, estimation_window, event_window,
+                        benchmark=benchmark)
     if cars.empty:
         logger.warning("Could not compute any CAR, not enough data.")
         return {}

@@ -23,7 +23,7 @@ on top of it.
 ## The pipeline
 
 ```
-scripts/run_ingestion.py   -->  prices (yfinance) + news (Google News RSS)
+scripts/run_ingestion.py   -->  prices + market indexes (yfinance) + news (Google News RSS)
 scripts/run_sentiment.py   -->  scores new articles with FinBERT
 scripts/run_event_study.py -->  checks if sentiment spikes line up with abnormal returns
 app/dashboard.py           -->  Streamlit dashboard showing all of the above
@@ -64,7 +64,8 @@ pip install -r requirements.txt
 python scripts/run_ingestion.py             # 1. collect prices + news
 python scripts/run_sentiment.py --limit 20  # 2. score a small batch first
 python scripts/run_sentiment.py             #    then score the rest
-streamlit run app/dashboard.py              # 3. open the dashboard
+python scripts/run_event_study.py --all-tickers  # 3. results for the 4 tickers
+streamlit run app/dashboard.py              # 4. open the dashboard
 ```
 
 The first time `run_sentiment.py` runs, it downloads FinBERT (about
@@ -105,11 +106,12 @@ temporary SQLite file, so my real database is not touched.
   Samsung specifically.
 - **FinBERT only scores the headline, not the full article**, to keep
   ingestion fast. This loses some nuance a full-text model would catch.
-- **The event study uses the simplest baseline (Constant Mean Return),**
-  not a Market Model that compares against an index like KOSPI or the
-  S&P 500. That would be the natural next step, kept out here because
-  it needs a consistent benchmark per ticker and wasn't necessary to
-  answer the question on a 2-year demo dataset.
+- **The market index contains the stock itself.** Nvidia and TSMC are
+  big parts of the SOXX ETF, and Samsung and SK Hynix are big parts of
+  the KOSPI. So when Nvidia moves, the index also moves a bit because
+  of Nvidia, and the market model removes a part of Nvidia's own
+  abnormal return. A cleaner benchmark would be the index without the
+  stock, but I don't have this data for free.
 
 ## Example result, and why I'm not hiding it
 
@@ -174,6 +176,21 @@ story, instead of only keeping the result that looks good.
   talk about a price move that already happened ("Nvidia shares jump"),
   so a big "before" CAR means the news follows the price and not the
   opposite.
+- **Market model for the normal return.** At first I used the
+  constant mean model (normal return = average return of the stock
+  before the event). On Nvidia it gave a strange result: in several
+  events the normal return was negative, because the stock was going
+  down in the estimation window, so any rebound later looked
+  "abnormal". Now I fit `stock return = alpha + beta * index return`
+  on the estimation window, with SOXX (US chip stocks) for Nvidia and
+  TSMC and the KOSPI for Samsung and SK Hynix (`BENCHMARKS` in
+  `src/config.py`). This way, a day where the whole market goes up is
+  not counted as abnormal. The old model is still there with
+  `--model constant`, to compare.
+- **All tickers are reported together.** `--all-tickers` runs the study
+  on the 4 stocks and prints one table, with the number of tests and a
+  Bonferroni correction at the end. I report all of them, because
+  keeping only the ticker with the best p-value would be p-hacking.
 - **±5 trading day event window**: about a week on each side, long
   enough to see if the market keeps reacting, short enough that an
   unrelated news story is unlikely to land in the same window.

@@ -58,6 +58,19 @@ MARKET_HOURS = {
     "005930.KS": ("Asia/Seoul", "15:30"),
 }
 
+# --- Market index for each ticker (for the market model) ---
+# The market model compares each stock to an index of its market, so a
+# day where the whole market goes up is not counted as "abnormal".
+# SOXX is an ETF of US chip stocks, ^KS11 is the KOSPI index (Seoul).
+# I take the index of the exchange where the stock trades, so the days
+# and hours are the same for the stock and the index.
+BENCHMARKS = {
+    "NVDA": "SOXX",
+    "TSM": "SOXX",
+    "000660.KS": "^KS11",
+    "005930.KS": "^KS11",
+}
+
 GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
 GOOGLE_NEWS_PARAMS = {"hl": "en-US", "gl": "US", "ceid": "US:en"}
 

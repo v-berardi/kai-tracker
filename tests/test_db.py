@@ -82,3 +82,4 @@ def test_every_ticker_has_valid_topics():
         for tag in topics:
             assert tag in config.NEWS_QUERIES, f"unknown topic {tag}"
         assert ticker in config.MARKET_HOURS, f"{ticker} has no market hours"
+        assert ticker in config.BENCHMARKS, f"{ticker} has no market index"

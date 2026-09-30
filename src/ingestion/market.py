@@ -11,6 +11,7 @@ import pandas as pd
 import yfinance as yf
 
 from src.config import (
+    BENCHMARKS,
     HTTP_BACKOFF_BASE,
     HTTP_MAX_RETRIES,
     PRICE_HISTORY_PERIOD,
@@ -94,7 +95,13 @@ def _to_tidy(raw: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
 
 
 def run(tickers: list[str] | None = None) -> int:
-    """Full pipeline: download prices, then save them. Returns rows written."""
+    """Full pipeline: download prices, then save them. Returns rows written.
+
+    By default it also downloads the market indexes (BENCHMARKS in the
+    config), because the market model of the event study needs them.
+    """
+    if tickers is None:
+        tickers = list(TICKERS.keys()) + sorted(set(BENCHMARKS.values()))
     df = fetch_prices(tickers)
     n = upsert_prices(df)
     logger.info("Prices stored: %d rows (%d tickers)", n, df["ticker"].nunique())

@@ -214,3 +214,59 @@ def test_aggregate_t_test_matches_scipy():
     assert result.p_post == pytest.approx(expected.pvalue)
     assert result.p_post < 0.05          # clearly positive after the event
     assert result.p_pre > 0.05           # no clear move before
+
+
+# --- market model ---
+
+def _prices_from_returns(dates, returns) -> pd.DataFrame:
+    """Build a made-up price table where the daily returns are known."""
+    close = 100 * np.cumprod(1 + np.asarray(returns))
+    return pd.DataFrame({"date": dates, "close": close, "ret": returns})
+
+
+def test_market_model_removes_the_market_move(monkeypatch):
+    rng = np.random.default_rng(0)
+    n = 300
+    dates = pd.date_range("2025-01-01", periods=n, freq="D")
+    market = rng.normal(0, 0.01, n)
+    stock = 0.001 + 2.0 * market        # alpha = 0.001, beta = 2, no noise
+    event_idx = 200
+    stock[event_idx] += 0.03            # the only real "abnormal" move
+
+    frames = {
+        "FAKE": _prices_from_returns(dates, stock),
+        "INDEX": _prices_from_returns(dates, market),
+    }
+    monkeypatch.setattr(es, "_load_prices", lambda ticker: frames[ticker])
+    events = _events_at(frames["FAKE"], [event_idx])
+
+    cars = es.compute_cars("FAKE", events, benchmark="INDEX")
+
+    # the regression finds the real beta, and only the 3% move is abnormal
+    assert cars.iloc[0]["beta"] == pytest.approx(2.0)
+    assert cars.iloc[0]["car"] == pytest.approx(0.03)
+    assert cars.iloc[0]["car_post"] == pytest.approx(0.03)
+    assert cars.iloc[0]["car_pre"] == pytest.approx(0.0, abs=1e-9)
+
+    # with the constant mean model, the market moves are counted as
+    # abnormal too, so the CAR is not 3% anymore
+    cars_const = es.compute_cars("FAKE", events)
+    assert abs(cars_const.iloc[0]["car"] - 0.03) > 0.01
+
+
+def test_load_returns_only_keeps_days_where_both_have_a_price(monkeypatch):
+    dates = pd.date_range("2025-01-01", periods=10, freq="D")
+    stock = pd.DataFrame({"date": dates, "close": np.arange(100.0, 110.0), "ret": 0.0})
+    # the index has no price on day 5 (for example a holiday)
+    index = pd.DataFrame({"date": dates, "close": np.arange(50.0, 60.0), "ret": 0.0})
+    index = index.drop(index=5).reset_index(drop=True)
+    frames = {"FAKE": stock, "INDEX": index}
+    monkeypatch.setattr(es, "_load_prices", lambda ticker: frames[ticker])
+
+    df = es._load_returns("FAKE", "INDEX")
+
+    assert dates[5] not in set(df["date"])
+    # the return on day 6 goes from day 4 to day 6, for both series
+    row = df[df["date"] == dates[6]].iloc[0]
+    assert row["ret"] == pytest.approx(106 / 104 - 1)
+    assert row["ret_m"] == pytest.approx(56 / 54 - 1)

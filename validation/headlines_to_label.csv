@@ -1,4 +1,4 @@
-﻿id,query_tag,headline,my_label,reason
+﻿id,query_tag,headline,llm_label,reason
 24,sk_hynix_hbm,"HBC, HBF Emerge as Next-Gen Memory to Succeed HBM - 조선일보",neutral,"new memory tech that may follow HBM: a trend, no clear effect on SK Hynix"
 44,sk_hynix_hbm,Will SK Hynix’s HBM Re‑Prioritization Shift Change Photronics’ (PLAB) AI Supply Chain Narrative? - Sahm,neutral,a question about another company (Photronics)
 64,sk_hynix_hbm,Qualcomm challenges Nvidia's AI grip with chip that ditches HBM - Nikkei Asia,negative,a chip without HBM challenges Nvidia: bad for HBM makers like SK Hynix

@@ -45,7 +45,7 @@ def test_sample_is_blind_and_reproducible(temp_db, tmp_path):
 
     df = pd.read_csv(out1, encoding="utf-8-sig")
     # no FinBERT output in the file, so the labels are not influenced
-    assert list(df.columns) == ["id", "query_tag", "headline", "my_label"]
+    assert list(df.columns) == ["id", "query_tag", "headline", "llm_label"]
     assert out1.read_text(encoding="utf-8-sig") == out2.read_text(encoding="utf-8-sig")
 
 
@@ -53,14 +53,14 @@ def test_evaluate_and_bad_labels(temp_db, tmp_path):
     path = tmp_path / "labels.csv"
     validation.make_sample(path, n=4, seed=1)
     df = pd.read_csv(path, encoding="utf-8-sig")
-    df["my_label"] = ["positive", "Positive ", "negative", ""]   # last one not labeled yet
+    df["llm_label"] = ["positive", "Positive ", "negative", ""]   # last one not labeled yet
     df.to_csv(path, index=False)
 
     res = validation.evaluate(path)
     assert res["n"] == 3                               # the empty label is skipped
     assert res["accuracy"] == pytest.approx(2 / 3)     # FinBERT says positive for all
 
-    df["my_label"] = ["positive", "good", "negative", ""]
+    df["llm_label"] = ["positive", "good", "negative", ""]
     df.to_csv(path, index=False)
     with pytest.raises(ValueError, match="good"):
         validation.evaluate(path)

@@ -1,14 +1,14 @@
-"""Check FinBERT against my own labels (see src/nlp/validation.py).
+"""Check FinBERT against reference labels (see src/nlp/validation.py).
 
 Usage:
-    # 1. make a random sample of 100 headlines to label
-    python scripts/validate_finbert.py sample
+    # 1. make a random sample of headlines to label (I used --n 50)
+    python scripts/validate_finbert.py sample --n 50
 
-    # 2. open validation/headlines_to_label.csv and fill the my_label
-    #    column with positive / negative / neutral (don't look at the
-    #    FinBERT scores before, to not be influenced)
+    # 2. fill the llm_label column of validation/headlines_to_label.csv
+    #    with positive / negative / neutral, without looking at the
+    #    FinBERT scores (in this project an LLM proposed the labels)
 
-    # 3. compare my labels with FinBERT
+    # 3. compare the labels with FinBERT
     python scripts/validate_finbert.py evaluate
 """
 
@@ -29,7 +29,7 @@ DEFAULT_FILE = PROJECT_ROOT / "validation" / "headlines_to_label.csv"
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check FinBERT with my own labels")
+    parser = argparse.ArgumentParser(description="Check FinBERT against reference labels")
     parser.add_argument("step", choices=["sample", "evaluate"])
     parser.add_argument("--file", type=Path, default=DEFAULT_FILE)
     parser.add_argument("--n", type=int, default=100, help="Sample size")
@@ -45,17 +45,17 @@ def main() -> int:
             return 1
         n = make_sample(args.file, n=args.n, seed=args.seed)
         print(f"{n} headlines written to {args.file}")
-        print(f"Fill the my_label column with: {', '.join(LABELS)}")
+        print(f"Fill the llm_label column with: {', '.join(LABELS)}")
         return 0
 
     res = evaluate(args.file)
-    print(f"\nFinBERT vs my labels, on {res['n']} headlines\n")
+    print(f"\nFinBERT vs the labels, on {res['n']} headlines\n")
     print(f"Accuracy:       {res['accuracy']:.1%}")
     print(f"Always '{res['majority_label']}': {res['majority_accuracy']:.1%}"
           f"  (trivial baseline: FinBERT must do better)")
     print(f"Cohen's kappa:  {res['kappa']:.2f}"
           f"  (0 = chance level, 1 = perfect agreement)\n")
-    print("Confusion matrix (rows = my label, columns = FinBERT):")
+    print("Confusion matrix (rows = llm_label, columns = FinBERT):")
     print(res["confusion"].to_string())
     print("\nPer class:")
     for label, m in res["per_class"].items():

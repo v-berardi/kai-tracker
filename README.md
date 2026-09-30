@@ -46,7 +46,7 @@ kai-tracker/
 │   ├── run_ingestion.py         # collect prices + news
 │   ├── run_sentiment.py         # score the headlines with FinBERT
 │   ├── run_event_study.py       # event study results (one or all tickers)
-│   └── validate_finbert.py      # compare FinBERT with my own labels
+│   └── validate_finbert.py      # compare FinBERT with reference labels
 ├── src/
 │   ├── config.py                # tickers, topics, time zones, indexes, settings
 │   ├── ingestion/

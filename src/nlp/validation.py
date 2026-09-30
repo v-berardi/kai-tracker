@@ -1,15 +1,17 @@
-"""Check FinBERT against my own labels on a random sample of headlines.
+"""Check FinBERT against reference labels on a random sample of headlines.
 
 FinBERT was trained on financial news (Financial PhraseBank), not on
 chip industry headlines from Google News. So before trusting the event
-study, I check how often FinBERT agrees with a human (me) on my data.
+study, I check how often FinBERT agrees with another reader on my data.
 
 How it works:
   1. make_sample(): take N random scored headlines and write them to a
-     CSV with an empty "my_label" column. The CSV does NOT contain
-     FinBERT's answer, so I can't be influenced by it when I label.
-  2. I fill "my_label" by hand: positive / negative / neutral.
-  3. evaluate(): compare my labels with FinBERT's labels (accuracy,
+     CSV with an empty "llm_label" column. The CSV does NOT contain
+     FinBERT's answer, so the labels are not influenced by it.
+  2. Fill "llm_label": positive / negative / neutral. In this project
+     the labels were proposed by an LLM (Claude), so the column says it
+     (see the README for the rule and the limits of LLM labels).
+  3. evaluate(): compare these labels with FinBERT's labels (accuracy,
      confusion matrix, precision / recall per class, Cohen's kappa).
 """
 
@@ -41,29 +43,29 @@ def make_sample(out_path: Path, n: int = 100, seed: int = 42) -> int:
         raise ValueError("No scored articles. Run scripts/run_sentiment.py first.")
 
     sample = df.sample(n=min(n, len(df)), random_state=seed).sort_values("id")
-    # the exact text that FinBERT scored, so I label the same thing
+    # the exact text that FinBERT scored, so the labels are about the same thing
     sample["headline"] = sample["title"]
-    sample["my_label"] = ""
+    sample["llm_label"] = ""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     # utf-8-sig so that Excel shows the accents correctly
-    sample[["id", "query_tag", "headline", "my_label"]].to_csv(
+    sample[["id", "query_tag", "headline", "llm_label"]].to_csv(
         out_path, index=False, encoding="utf-8-sig"
     )
     return len(sample)
 
 
 def read_labels(path: Path) -> pd.DataFrame:
-    """Read the labeled CSV and check the labels. Returns id, my_label."""
+    """Read the labeled CSV and check the labels. Returns id, llm_label."""
     df = pd.read_csv(path, encoding="utf-8-sig", sep=None, engine="python")
-    df["my_label"] = df["my_label"].fillna("").astype(str).str.strip().str.lower()
-    df = df[df["my_label"] != ""]                      # rows not labeled yet
-    bad = df[~df["my_label"].isin(LABELS)]
+    df["llm_label"] = df["llm_label"].fillna("").astype(str).str.strip().str.lower()
+    df = df[df["llm_label"] != ""]                      # rows not labeled yet
+    bad = df[~df["llm_label"].isin(LABELS)]
     if not bad.empty:
         raise ValueError(
-            f"Unknown labels {sorted(bad['my_label'].unique())} for ids "
+            f"Unknown labels {sorted(bad['llm_label'].unique())} for ids "
             f"{bad['id'].tolist()[:10]}. Use: {', '.join(LABELS)}."
         )
-    return df[["id", "my_label"]]
+    return df[["id", "llm_label"]]
 
 
 def metrics(y_true: pd.Series, y_pred: pd.Series) -> dict:
@@ -75,7 +77,7 @@ def metrics(y_true: pd.Series, y_pred: pd.Series) -> dict:
     y_pred = pd.Series(y_pred).reset_index(drop=True)
     n = len(y_true)
 
-    # rows = my label (truth), columns = FinBERT
+    # rows = llm_label (reference), columns = FinBERT
     confusion = pd.crosstab(y_true, y_pred).reindex(
         index=LABELS, columns=LABELS, fill_value=0
     )
@@ -112,10 +114,10 @@ def metrics(y_true: pd.Series, y_pred: pd.Series) -> dict:
 
 
 def evaluate(path: Path) -> dict:
-    """Compare my labels in path with the FinBERT labels in the database."""
+    """Compare the labels in path with the FinBERT labels in the database."""
     labels = read_labels(path)
     if labels.empty:
-        raise ValueError(f"No labels found in {path}. Fill the my_label column first.")
+        raise ValueError(f"No labels found in {path}. Fill the llm_label column first.")
     with get_connection() as conn:
         finbert = pd.read_sql_query(
             "SELECT id, sentiment_label AS finbert_label FROM news "
@@ -125,4 +127,4 @@ def evaluate(path: Path) -> dict:
     missing = len(labels) - len(df)
     if missing:
         logger.warning("%d labeled ids are not scored in the database, skipped.", missing)
-    return metrics(df["my_label"], df["finbert_label"])
+    return metrics(df["llm_label"], df["finbert_label"])

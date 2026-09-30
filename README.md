@@ -112,32 +112,77 @@ temporary SQLite file, so my real database is not touched.
   of Nvidia, and the market model removes a part of Nvidia's own
   abnormal return. A cleaner benchmark would be the index without the
   stock, but I don't have this data for free.
+- **Not many events.** Google News RSS only gives around 100 recent
+  articles per query, so the news history is much shorter than the 2
+  years of prices (the first Nvidia event is in February 2026). After
+  removing the overlapping events, only 6 or 7 events are left for each
+  stock, which is too few for a strong conclusion.
+- **Samsung events are too frequent.** With the 0.25 threshold, 58% of
+  the trading days are inside an event window, so 31 of the 45 Samsung
+  events have no clean baseline and are skipped. A higher threshold
+  would be better for Samsung, but I didn't change it after seeing the
+  results, to not tune the method on the same data I test it on.
 
-## Example result, and why I'm not hiding it
+## Results, and why I'm not hiding them
 
-> **Note:** this output comes from an older version of the study,
-> before I fixed the news topics per ticker, the time zones, the
-> overlapping events and the before/after split of the CAR. I will
-> replace it with the output of the new version.
-
-This is the real output of `python scripts/run_event_study.py --ticker NVDA`,
-on about 2 years of data (47 sentiment spikes detected):
+I ran the study on the 4 stocks with
+`python scripts/run_event_study.py --all-tickers` (market model,
+threshold 0.25, news topics of each ticker). I decided before running
+it that I would report the 4 stocks, whatever the result.
 
 ```
-[all     ]  n=44  CAAR=-0.0132  t=-1.44  p=0.158  -> not significant
-[positive]  n=36  CAAR=-0.0227  t=-2.33  p=0.026  -> significant
-[negative]  n= 8  CAAR=+0.0293  t=+1.47  p=0.185  -> not significant
+   ticker    group  n CAAR after p after CAAR before p before CAAR full p full
+     NVDA      all  6    +0.0032   0.908     +0.0353    0.050   +0.0385  0.253
+     NVDA positive  4    -0.0076   0.860     +0.0492    0.017   +0.0416  0.437
+     NVDA negative  2    +0.0247   0.360     +0.0075    0.855   +0.0322  0.302
+000660.KS      all  7    +0.0050   0.612     +0.0203    0.547   +0.0253  0.525
+000660.KS positive  6    +0.0039   0.738     +0.0313    0.415   +0.0352  0.449
+005930.KS      all  7    -0.0014   0.935     +0.0116    0.513   +0.0103  0.738
+005930.KS positive  5    -0.0114   0.618     +0.0009    0.966   -0.0105  0.793
+005930.KS negative  2    +0.0237   0.202     +0.0384    0.352   +0.0621  0.160
+      TSM      all  7    +0.0203   0.038     -0.0055    0.707   +0.0148  0.409
+      TSM positive  6    +0.0229   0.043     -0.0044    0.800   +0.0185  0.380
+
+30 tests in total. p < 0.05: 3 (about 1.5 expected by chance only).
+With the Bonferroni correction (p < 0.0017): 0.
 ```
 
-The overall test ("all") is not significant, which is what I expected
-going in. The "positive" sub-test alone does come out significant at
-p < 0.05 — but with a *negative* CAAR, meaning positive sentiment spikes
-were actually followed by slightly worse returns, not better ones. I'm
-not reading this as "sell the good news": I ran three sub-tests here
-(all / positive / negative), and with a 5% significance level, getting
-one result like this by chance alone is not surprising. Treating it as
-a real, tradeable effect without testing it on more data or a different
-period would be a mistake.
+(Groups with less than 2 events have no test, for example the
+negative events of SK Hynix and TSMC.)
+
+**Main result: no clear link.** For the main question (do returns move
+*after* a sentiment spike, days [0, +5]), 3 stocks out of 4 are far
+from significant. Only TSMC has p < 0.05 (p = 0.038), but I don't think
+it is a real effect:
+
+- With the constant mean model, the same TSMC events give p = 0.774.
+  A real effect should not disappear when I change the baseline.
+- It is only 7 events.
+- There are 30 tests: 3 are below 0.05, and about 1.5 are expected by
+  chance only. With the Bonferroni correction, none is significant.
+
+**Market model vs constant mean.** Changing the baseline changes the
+results a lot, which shows why the market model was needed
+(`--all-tickers --model constant` gives the old numbers):
+
+- Nvidia "after": +2.94% with the constant mean, +0.32% with the
+  market model. The rise I saw before was the whole chip sector going
+  up, not a reaction to the news.
+- SK Hynix "after": -6.29% (p = 0.054) with the constant mean, +0.50%
+  (p = 0.61) with the market model. The KOSPI was going down on those
+  days, and the constant mean counted this as abnormal.
+
+**The only pattern that stays with both models:** for Nvidia, the
+stock goes up *before* the event (before CAAR +3.1% with the constant
+mean, +3.5% with the market model, p between 0.05 and 0.09). This fits
+the idea that the headlines follow the price: positive articles come
+after the stock already went up. But with 6 events and after the
+Bonferroni correction, it is only a hint, not a result.
+
+Also, each version of my method gave a different "significant" result
+(first "positive news, then lower returns", then the full window for
+Nvidia, now TSMC). When the "significant" result moves each time the
+method changes, it is a typical sign of noise.
 
 I'm showing this instead of only the "clean" not-significant numbers
 because that's the actual point of running a statistical test: to see

@@ -1,64 +1,74 @@
 # K-AI Hardware Tracker
 
-I built this project to follow the news around the AI memory chip
-supply chain (SK Hynix, Nvidia, Samsung, TSMC) and compare it with
-their stock prices. It collects news and stock prices, scores each
-news headline with a financial NLP model (FinBERT), and then checks
-with a basic statistical test if sentiment spikes are actually
-followed by unusual stock returns.
+[![tests](https://github.com/v-berardi/kai-tracker/actions/workflows/tests.yml/badge.svg)](https://github.com/v-berardi/kai-tracker/actions/workflows/tests.yml)
+
+I built this project to follow the news about the AI memory chip supply
+chain (SK Hynix, Nvidia, Samsung, TSMC) and compare it with their stock
+prices. It collects news headlines and prices, scores each headline
+with a financial NLP model (FinBERT), and then uses an event study to
+check if sentiment spikes are followed by unusual stock returns.
 
 **This is a monitoring tool, not a trading tool.** It does not try to
-predict prices. It checks if there is a link between news sentiment
-and stock returns, and shows the real result, even when that result is
-"no clear link" or something that doesn't fit a simple story.
+predict prices. It checks if there is a link between news sentiment and
+stock returns, and it shows the real result, even when the result is
+"no clear link".
+
+![Dashboard](docs/dashboard.png)
 
 ## Why I built this
 
-I wanted a project that goes through a full, real pipeline: collecting
-data, storing it, running an NLP model on it, and checking the result
-with an actual statistical test instead of just assuming sentiment and
-price are related. It also let me practice building a small dashboard
-on top of it.
+I wanted a project with a full, real pipeline: collect data, store it,
+run an NLP model on it, and check the result with a real statistical
+test, instead of just supposing that sentiment and prices are linked.
+I also wanted to practice building a small dashboard on top of it.
 
 ## The pipeline
 
 ```
 scripts/run_ingestion.py   -->  prices + market indexes (yfinance) + news (Google News RSS)
-scripts/run_sentiment.py   -->  scores new articles with FinBERT
-scripts/run_event_study.py -->  checks if sentiment spikes line up with abnormal returns
-app/dashboard.py           -->  Streamlit dashboard showing all of the above
+scripts/run_sentiment.py   -->  scores the new headlines with FinBERT
+scripts/run_event_study.py -->  checks if sentiment spikes are followed by abnormal returns
+app/dashboard.py           -->  Streamlit dashboard with all of the above
 ```
 
 Project layout:
 
 ```
 kai-tracker/
-├── data/                  # SQLite database (created on first run, not in git)
+├── .github/workflows/tests.yml  # CI: ruff + pytest on every push
+├── app/
+│   └── dashboard.py             # Streamlit + Plotly dashboard
+├── data/                        # SQLite database (created on first run, not in git)
+├── docs/dashboard.png           # screenshot for this README
+├── validation/                  # my hand labels to check FinBERT
 ├── scripts/
-│   ├── run_ingestion.py    # collect prices + news
-│   ├── run_sentiment.py    # score articles with FinBERT
-│   └── run_event_study.py  # print the event study results
+│   ├── run_ingestion.py         # collect prices + news
+│   ├── run_sentiment.py         # score the headlines with FinBERT
+│   ├── run_event_study.py       # event study results (one or all tickers)
+│   └── validate_finbert.py      # compare FinBERT with my own labels
 ├── src/
-│   ├── config.py            # tickers, news queries, settings
+│   ├── config.py                # tickers, topics, time zones, indexes, settings
 │   ├── ingestion/
-│   │   ├── market.py         # stock prices from yfinance
-│   │   └── news.py           # news from Google News RSS
+│   │   ├── market.py            # prices from yfinance
+│   │   └── news.py              # news from Google News RSS
 │   ├── nlp/
-│   │   └── sentiment.py      # FinBERT sentiment scoring
+│   │   ├── sentiment.py         # FinBERT scoring
+│   │   └── validation.py        # metrics to check FinBERT
 │   ├── storage/
-│   │   └── db.py             # SQLite database functions
+│   │   └── db.py                # SQLite functions
 │   └── analysis/
-│       └── event_study.py    # the statistical test
-├── tests/
-│   └── test_event_study.py   # unit tests, run without a database
-└── app/
-    └── dashboard.py          # Streamlit + Plotly dashboard
+│       └── event_study.py       # the event study and the tests
+├── tests/                       # unit tests (no network, no real database)
+├── requirements.txt
+└── ruff.toml                    # linter settings
 ```
 
 ## How to run it
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+.venv\Scripts\Activate.ps1        # Windows (PowerShell)
+source .venv/bin/activate          # Linux / macOS
 pip install -r requirements.txt
 
 python scripts/run_ingestion.py             # 1. collect prices + news
@@ -69,59 +79,88 @@ streamlit run app/dashboard.py              # 4. open the dashboard
 ```
 
 The first time `run_sentiment.py` runs, it downloads FinBERT (about
-440MB, then it stays cached). Scoring is incremental: only new
-articles get scored each time you run it again.
+440MB, then it stays in the cache). Scoring is incremental: only the
+new articles are scored.
 
-You can run the scripts more than once without breaking anything:
-prices get updated in place and articles are never added twice
-(checked by URL).
+The scripts can run many times without problem: prices are updated in
+place and an article is never added twice (checked by URL).
+
+Other options of the event study:
+
+```bash
+python scripts/run_event_study.py --ticker NVDA                   # details for one ticker
+python scripts/run_event_study.py --all-tickers --model constant  # old baseline, to compare
+```
 
 ### Running the tests
 
 ```bash
-pytest tests/ -v
+pytest -v
+ruff check .
 ```
 
-The tests use made-up sentiment and price numbers, so they check the
-event study logic (event detection, CAR, CAAR, the t-test, overlapping
-events) without needing the real database. The database tests use a
-temporary SQLite file, so my real database is not touched.
+The tests use small made-up data where I know the answer in advance:
+event detection, overlapping events, the minimum number of events,
+the market model (it must find the beta I used to build the data), the
+t-test (compared with scipy), time zones, and the FinBERT metrics (an
+example computed by hand). The database tests use a temporary SQLite
+file, so the tests need no network, no model and no real database.
+GitHub Actions runs them, with the ruff linter, on every push.
+
+## Is FinBERT right on my headlines?
+
+FinBERT was trained on financial news, not on chip industry headlines
+from Google News. So I checked it on my own data:
+
+```bash
+python scripts/validate_finbert.py sample    # 100 random headlines (seed 42)
+# I label them by hand in validation/headlines_to_label.csv,
+# without looking at the FinBERT answer before
+python scripts/validate_finbert.py evaluate
+```
+
+The script gives the accuracy, the confusion matrix, precision / recall
+per class and Cohen's kappa, and compares with a trivial baseline
+(always answering the most frequent class). Accuracy alone can look
+good: if 70% of the headlines are neutral, a model that always says
+"neutral" gets 70%, but its kappa is 0.
+
+**Result:** not done yet, I'm labeling the sample.
 
 ## What works
 
-- Collecting prices for 4 tickers and news for 6 topics runs
-  end-to-end and fills the database.
-- FinBERT scoring is incremental: only new articles get scored each
-  time.
-- The event study runs on real data and gives a result I can trust,
-  because I checked the logic with unit tests on made-up numbers where
-  I know the correct answer in advance.
-- The dashboard shows price vs. sentiment and the event study results,
-  and stays readable even with almost two years of daily data.
+- Collecting the prices of 4 stocks + 2 indexes and the news of 6
+  topics runs end to end and fills the database.
+- FinBERT scoring is incremental: only the new articles are scored.
+- The event study runs on real data, and I trust the logic because
+  the unit tests check it on data where I know the right answer.
+- The dashboard shows price vs sentiment and the event study results,
+  with a choice between the two baselines.
 
 ## What's limited
 
-- **Google News RSS is one, English-only source.** It probably misses
-  a lot of Korean coverage, which likely matters a lot for SK Hynix and
-  Samsung specifically.
-- **FinBERT only scores the headline, not the full article**, to keep
-  ingestion fast. This loses some nuance a full-text model would catch.
-- **The market index contains the stock itself.** Nvidia and TSMC are
-  big parts of the SOXX ETF, and Samsung and SK Hynix are big parts of
-  the KOSPI. So when Nvidia moves, the index also moves a bit because
-  of Nvidia, and the market model removes a part of Nvidia's own
-  abnormal return. A cleaner benchmark would be the index without the
-  stock, but I don't have this data for free.
+- **Google News RSS is one source, in English only.** It probably
+  misses a lot of Korean news, which matters a lot for SK Hynix and
+  Samsung.
+- **FinBERT only reads the headline, not the full article.** It is
+  faster, but a headline loses some nuance.
 - **Not many events.** Google News RSS only gives around 100 recent
   articles per query, so the news history is much shorter than the 2
-  years of prices (the first Nvidia event is in February 2026). After
-  removing the overlapping events, only 6 or 7 events are left for each
-  stock, which is too few for a strong conclusion.
-- **Samsung events are too frequent.** With the 0.25 threshold, 58% of
-  the trading days are inside an event window, so 31 of the 45 Samsung
-  events have no clean baseline and are skipped. A higher threshold
-  would be better for Samsung, but I didn't change it after seeing the
-  results, to not tune the method on the same data I test it on.
+  years of prices, and it only grows if I run the ingestion often.
+  After removing the overlapping events, only 6 or 7 events are left per
+  stock, which is too few for a strong conclusion. I don't run any test
+  under 5 events.
+- **The market index contains the stock itself.** Nvidia and TSMC are
+  big parts of the SOXX ETF, and Samsung and SK Hynix are big parts of
+  the KOSPI. When Nvidia moves, the index also moves a bit because of
+  Nvidia, so the market model removes a part of Nvidia's own abnormal
+  return. A cleaner benchmark would be the index without the stock, but
+  I don't have this data for free.
+- **Samsung events are too frequent.** With the 0.25 threshold, most of
+  the Samsung trading days are inside an event window, so many events
+  have no clean baseline and are skipped. I didn't change the threshold
+  after seeing the results, to not tune the method on the data I test
+  it on.
 
 ## Results, and why I'm not hiding them
 
@@ -191,6 +230,15 @@ story, instead of only keeping the result that looks good.
 
 ## Design choices
 
+- **Collecting and scoring are two separate steps.** A new article
+  gets a `sentiment_score` of NULL, and a second script fills it later.
+  So collecting news never waits for the NLP model to load.
+- **RSS instead of scraping the Google News website.** The RSS feed is
+  simple XML and its format changes less often than a web page.
+- **Each news feed runs on its own**, so if one fails, the others still
+  work.
+- **SQLite**: no server to run, and a UNIQUE constraint on the URL
+  removes the duplicates for free.
 - **Every row stores when it was last written** (`ingested_at_utc`).
   For news it is when I collected the article. For prices it is the
   last update, because prices are rewritten at each run (yfinance
@@ -199,58 +247,45 @@ story, instead of only keeping the result that looks good.
 - **Each ticker uses only its own news topics** (`TICKER_TOPICS` in
   `src/config.py`). At first all the topics were mixed together, so a
   headline about Samsung could create an event that was then tested on
-  Nvidia's price. Now the Nvidia study only uses the Nvidia topic.
+  Nvidia's price.
 - **News is matched to the right trading day.** News times are in UTC,
   but Nvidia trades in New York and SK Hynix in Seoul. I convert each
   headline to the local time of the exchange, and if it comes out after
-  the market close, it counts for the next trading day (`MARKET_HOURS`
-  in `src/config.py`).
-- **RSS instead of scraping the news website**: the RSS feed is simple,
-  structured XML, and doesn't change format as often as a web page.
-- **Collecting data and scoring it are two separate steps.** New
-  articles get a `sentiment_score` of NULL first, and a second script
-  fills it in later. Collecting news never has to wait for the NLP
-  model to load.
-- **SQLite**: no server to run, and a UNIQUE constraint on the article
-  URL gives me deduplication for free.
-- **Each news feed runs on its own**, so if one of them fails, the
-  others still work.
-- **The CAR is split in "before" [-5, -1] and "after" [0, +5].** My
-  question is if returns move *after* the news, so the "after" part is
-  the main test. The "before" part is still useful: a lot of headlines
-  talk about a price move that already happened ("Nvidia shares jump"),
-  so a big "before" CAR means the news follows the price and not the
-  opposite.
-- **Market model for the normal return.** At first I used the
-  constant mean model (normal return = average return of the stock
-  before the event). On Nvidia it gave a strange result: in several
-  events the normal return was negative, because the stock was going
-  down in the estimation window, so any rebound later looked
-  "abnormal". Now I fit `stock return = alpha + beta * index return`
-  on the estimation window, with SOXX (US chip stocks) for Nvidia and
-  TSMC and the KOSPI for Samsung and SK Hynix (`BENCHMARKS` in
-  `src/config.py`). This way, a day where the whole market goes up is
-  not counted as abnormal. The old model is still there with
-  `--model constant`, to compare.
-- **All tickers are reported together.** `--all-tickers` runs the study
-  on the 4 stocks and prints one table, with the number of tests and a
-  Bonferroni correction at the end. I report all of them, because
-  keeping only the ticker with the best p-value would be p-hacking.
+  the close, it counts for the next trading day (`MARKET_HOURS`).
+- **Market model for the normal return.** At first I used the constant
+  mean (normal return = average return of the stock before the event).
+  On Nvidia it gave a strange result: in several events the normal
+  return was negative because the stock was going down in the
+  estimation window, so any rebound looked "abnormal". Now I fit
+  `stock return = alpha + beta * index return` on the estimation
+  window, with SOXX (US chip stocks) for Nvidia and TSMC and the KOSPI
+  for Samsung and SK Hynix (`BENCHMARKS`). A day where the whole market
+  goes up is not counted as abnormal anymore. `--model constant` keeps
+  the old baseline, to compare.
 - **±5 trading day event window**: about a week on each side, long
-  enough to see if the market keeps reacting, short enough that an
-  unrelated news story is unlikely to land in the same window.
-- **Events do not overlap.** The t-test supposes that the events are
-  independent. If two event windows share some days, the same returns
-  are counted two times and the test looks more significant than it
-  really is. So I skip an event if it starts inside the window of the
-  previous one, and I remove the event window days from the "normal
-  return" of the other events.
+  enough to see if the market keeps reacting, short enough that another
+  news story is not likely to land in the same window.
+- **The CAR is split in "before" [-5, -1] and "after" [0, +5].** My
+  question is if returns move *after* the news, so "after" is the main
+  test. "Before" is still useful: a lot of headlines talk about a move
+  that already happened ("Nvidia shares jump"), so a big "before" CAR
+  means the news follows the price and not the opposite.
+- **Events do not overlap.** The t-test supposes independent events.
+  If two event windows share some days, the same returns are counted
+  two times and the test looks more significant than it really is. So I
+  skip an event if it starts inside the window of the previous one, and
+  I remove the event window days from the "normal return" of the other
+  events.
+- **All tickers are reported together.** `--all-tickers` prints one
+  table with the number of tests and a Bonferroni correction. I report
+  the 4 stocks, because keeping only the ticker with the best p-value
+  would be p-hacking.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
 
 ## Author
 
 Vincent Berardi, data science master's student at EURECOM. Personal
-project to practice data collection, NLP, and basic statistics.
+project to practice data collection, NLP and statistics.

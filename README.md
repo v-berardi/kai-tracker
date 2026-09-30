@@ -40,7 +40,7 @@ kai-tracker/
 │   └── dashboard.py             # Streamlit + Plotly dashboard
 ├── data/                        # SQLite database (created on first run, not in git)
 ├── docs/dashboard.png           # screenshot for this README
-├── validation/                  # my hand labels to check FinBERT
+├── validation/                  # labeled headlines to check FinBERT
 ├── scripts/
 │   ├── run_ingestion.py         # collect prices + news
 │   ├── run_sentiment.py         # score the headlines with FinBERT
@@ -110,22 +110,55 @@ GitHub Actions runs them, with the ruff linter, on every push.
 ## Is FinBERT right on my headlines?
 
 FinBERT was trained on financial news, not on chip industry headlines
-from Google News. So I checked it on my own data:
+from Google News. So I checked it on a random sample of my data:
 
 ```bash
-python scripts/validate_finbert.py sample    # 100 random headlines (seed 42)
-# I label them by hand in validation/headlines_to_label.csv,
-# without looking at the FinBERT answer before
+python scripts/validate_finbert.py sample --n 50   # 50 random headlines (seed 42)
+# labels in validation/headlines_to_label.csv (see below)
 python scripts/validate_finbert.py evaluate
 ```
 
-The script gives the accuracy, the confusion matrix, precision / recall
-per class and Cohen's kappa, and compares with a trivial baseline
-(always answering the most frequent class). Accuracy alone can look
-good: if 70% of the headlines are neutral, a model that always says
-"neutral" gets 70%, but its kappa is 0.
+**The labels.** The rule: is this headline good or bad news for an
+investor in the company of the topic (SK Hynix for `sk_hynix_hbm`,
+Nvidia for `nvidia_supply`, ...)? If it is mixed or not clear, it is
+neutral. The labels were proposed by an LLM (Claude) with this rule,
+without seeing the FinBERT answer. This is a limit: LLM labels are not
+a perfect ground truth, so these numbers show how much FinBERT agrees
+with another reader, not its exact accuracy.
 
-**Result:** not done yet, I'm labeling the sample.
+**Result on 50 headlines:**
+
+```
+Accuracy:       60.0%   (95% interval: about 46% to 72%)
+Always 'positive': 42.0%  (trivial baseline)
+Cohen's kappa:  0.39
+
+Confusion matrix (rows = label, columns = FinBERT):
+          positive  negative  neutral
+positive        12         0        9
+negative         4         8        2
+neutral          4         1       10
+```
+
+FinBERT does better than the trivial baseline, but the agreement is
+only "fair" (kappa 0.39). Two kinds of errors:
+
+- **FinBERT is too careful:** 9 of the 21 good news are "neutral" for
+  it.
+- **Sometimes it gets the sign wrong:** 4 of the 14 bad news are
+  "positive" for it. FinBERT reads the tone of the sentence, but it
+  doesn't know for which company the news is good or bad. For example,
+  "Samsung to overtake SK Hynix" sounds positive, but it is bad news
+  for SK Hynix, the company of the topic.
+- When FinBERT says "negative", it is almost always right (precision
+  0.89).
+
+**What it means for the event study:** the sentiment signal is noisy,
+and some events probably have the wrong sign. This makes a real effect
+harder to find, so it is one more reason to read the "no clear link"
+result carefully. A better next step would be a model that knows the
+target company (entity-level sentiment), or FinBERT fine-tuned on
+labeled chip headlines.
 
 ## What works
 
@@ -143,7 +176,8 @@ good: if 70% of the headlines are neutral, a model that always says
   misses a lot of Korean news, which matters a lot for SK Hynix and
   Samsung.
 - **FinBERT only reads the headline, not the full article.** It is
-  faster, but a headline loses some nuance.
+  faster, but a headline loses some nuance. And on my headlines it
+  only agrees "fairly" with the labels (kappa 0.39, see above).
 - **Not many events.** Google News RSS only gives around 100 recent
   articles per query, so the news history is much shorter than the 2
   years of prices, and it only grows if I run the ingestion often.

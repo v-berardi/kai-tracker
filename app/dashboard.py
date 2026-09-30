@@ -25,7 +25,7 @@ import streamlit as st                                          # noqa: E402
 from plotly.subplots import make_subplots                       # noqa: E402
 
 from src.analysis.event_study import run as run_study           # noqa: E402
-from src.config import TICKERS, NEWS_QUERIES                    # noqa: E402
+from src.config import TICKERS, NEWS_QUERIES, TICKER_TOPICS     # noqa: E402
 from src.storage.db import get_connection, daily_sentiment      # noqa: E402
 
 st.set_page_config(
@@ -54,8 +54,8 @@ def load_prices(ticker: str) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=300)
-def load_sentiment(query_tag: str | None) -> pd.DataFrame:
-    return daily_sentiment(query_tag)
+def load_sentiment(query_tags: tuple[str, ...]) -> pd.DataFrame:
+    return daily_sentiment(list(query_tags))
 
 
 @st.cache_data(ttl=300)
@@ -83,9 +83,9 @@ def load_stats() -> dict:
 
 
 @st.cache_data(ttl=300)
-def load_event_study(ticker: str, query_tag: str | None, threshold: float) -> dict:
+def load_event_study(ticker: str, query_tags: tuple[str, ...], threshold: float) -> dict:
     """Run the event study and return the results."""
-    return run_study(ticker=ticker, query_tag=query_tag, threshold=threshold)
+    return run_study(ticker=ticker, query_tags=list(query_tags), threshold=threshold)
 
 
 # Sidebar
@@ -100,9 +100,17 @@ with st.sidebar:
 
     window_days = st.slider("Window (days)", 30, 730, 180, 30)
 
-    query_tag_options = {"All topics": None} | {v: k for k, v in NEWS_QUERIES.items()}
-    theme_label = st.selectbox("News topic", list(query_tag_options.keys()))
-    query_tag = query_tag_options[theme_label]
+    # None = the topics of this ticker (TICKER_TOPICS in config).
+    # I use tuples and not lists because they are passed to the cached
+    # functions below.
+    topic_options = {
+        "Topics linked to this ticker": None,
+        "All topics": tuple(NEWS_QUERIES.keys()),
+    } | {v: (k,) for k, v in NEWS_QUERIES.items()}
+    topic_label = st.selectbox("News topics", list(topic_options.keys()))
+    selected = topic_options[topic_label]
+    query_tags = selected if selected is not None else tuple(TICKER_TOPICS[ticker])
+    st.caption("Topics used: " + ", ".join(query_tags))
 
     st.divider()
     st.subheader("Event study")
@@ -137,7 +145,7 @@ tab_chart, tab_study = st.tabs(["Price vs Sentiment", "Event study"])
 # Tab 1: Price vs Sentiment
 with tab_chart:
     prices = load_prices(ticker)
-    sentiment = load_sentiment(query_tag)
+    sentiment = load_sentiment(query_tags)
 
     if prices.empty:
         st.warning(f"No price data for {ticker}.")
@@ -242,7 +250,7 @@ just means this signal is not strong enough to prove anything on its own.
         """)
 
     with st.spinner("Computing..."):
-        results = load_event_study(ticker, query_tag, threshold)
+        results = load_event_study(ticker, query_tags, threshold)
 
     if not results:
         st.warning(

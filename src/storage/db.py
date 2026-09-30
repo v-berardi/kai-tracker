@@ -136,17 +136,23 @@ def update_sentiment(rows: list[tuple[float, str, int]]) -> int:
     return len(rows)
 
 
-def daily_sentiment(query_tag: str | None = None) -> pd.DataFrame:
+def daily_sentiment(query_tags: list[str] | str | None = None) -> pd.DataFrame:
     """Average sentiment per PUBLICATION day (not the day we collected it).
 
+    query_tags: one topic, a list of topics, or None for all topics.
     Returns: date, avg_score, n_articles. This is the time series shown
     next to prices in the dashboard.
     """
+    if isinstance(query_tags, str):
+        query_tags = [query_tags]
     where = "WHERE sentiment_score IS NOT NULL AND published_utc IS NOT NULL"
     params: tuple = ()
-    if query_tag:
-        where += " AND query_tag = ?"
-        params = (query_tag,)
+    if query_tags:
+        # one "?" for each topic, so the values are still sent as
+        # parameters (no SQL injection)
+        placeholders = ", ".join("?" for _ in query_tags)
+        where += f" AND query_tag IN ({placeholders})"
+        params = tuple(query_tags)
     sql = f"""
         SELECT substr(published_utc, 1, 10) AS date,
                AVG(sentiment_score)          AS avg_score,

@@ -45,6 +45,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from src.config import TICKER_TOPICS
 from src.storage.db import daily_sentiment, get_connection
 
 logger = logging.getLogger(__name__)
@@ -234,20 +235,28 @@ def aggregate(
 
 def run(
     ticker: str,
-    query_tag: str | None = None,
+    query_tags: list[str] | None = None,
     threshold: float = 0.25,
     min_articles: int = 2,
     estimation_window: tuple[int, int] = (-120, -21),
     event_window: tuple[int, int] = (-5, 5),
 ) -> dict[str, StudyResult | None]:
-    """Run the full event study for one ticker and one news topic.
+    """Run the full event study for one ticker.
+
+    query_tags: the news topics to use. If None, I take the topics of
+    this ticker in config.TICKER_TOPICS, so the events come from news
+    about this company and not about another one.
 
     Returns a dict {direction: StudyResult} with keys
     'positive', 'negative', 'all'.
     """
-    sentiment = daily_sentiment(query_tag)
+    if query_tags is None:
+        query_tags = TICKER_TOPICS.get(ticker)
+    logger.info("News topics used for %s: %s", ticker, query_tags or "all")
+
+    sentiment = daily_sentiment(query_tags)
     if sentiment.empty:
-        logger.warning("No sentiment data in the database%s.", f" (tag={query_tag})" if query_tag else "")
+        logger.warning("No sentiment data in the database (topics=%s).", query_tags)
         return {}
 
     events = detect_events(sentiment, threshold=threshold, min_articles=min_articles)

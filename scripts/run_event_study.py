@@ -3,6 +3,11 @@
 Usage:
     python scripts/run_event_study.py
     python scripts/run_event_study.py --ticker NVDA --threshold 0.3
+    python scripts/run_event_study.py --ticker TSM --query-tag tsmc_cowos
+    python scripts/run_event_study.py --ticker NVDA --all-topics
+
+By default it only uses the news topics of the ticker
+(see TICKER_TOPICS in src/config.py).
 
 Prints results to the terminal. Charts live in the dashboard.
 """
@@ -15,8 +20,8 @@ from pathlib import Path
 # Make the src package importable when this script is run directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.config import TICKERS              # noqa: E402
-from src.analysis.event_study import run    # noqa: E402
+from src.config import NEWS_QUERIES, TICKERS  # noqa: E402
+from src.analysis.event_study import run      # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
@@ -26,19 +31,27 @@ def main() -> None:
     parser.add_argument("--ticker", default="NVDA", choices=list(TICKERS.keys()))
     parser.add_argument("--threshold", type=float, default=0.25,
                         help="Minimum FinBERT score to declare an event")
-    parser.add_argument("--query-tag", default=None,
-                        help="Filter by news topic (e.g. sk_hynix_hbm)")
+    parser.add_argument("--query-tag", action="append",
+                        choices=list(NEWS_QUERIES.keys()),
+                        help="News topic to use (you can give it more than once)")
+    parser.add_argument("--all-topics", action="store_true",
+                        help="Use all the news topics, not only the ones of the ticker")
     args = parser.parse_args()
+
+    if args.all_topics:
+        query_tags = list(NEWS_QUERIES.keys())
+    else:
+        query_tags = args.query_tag  # None -> topics of the ticker
 
     print(f"\n{'='*60}")
     print(f"Event study - {TICKERS[args.ticker]} ({args.ticker})")
     print(f"Sentiment threshold: |score| >= {args.threshold}")
-    print(f"News topic: {args.query_tag or 'all'}")
+    print(f"News topics: {', '.join(query_tags) if query_tags else 'linked to the ticker'}")
     print(f"{'='*60}\n")
 
     results = run(
         ticker=args.ticker,
-        query_tag=args.query_tag,
+        query_tags=query_tags,
         threshold=args.threshold,
     )
 

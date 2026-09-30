@@ -32,6 +32,18 @@ NEWS_QUERIES = {
     "samsung_hbm": "Samsung HBM3E",
     "memory_capex": "DRAM capex semiconductor",
     "korea_chips": "Korea semiconductor export",
+    "tsmc_cowos": "TSMC CoWoS",
+}
+
+# --- News topics for each ticker ---
+# The event study of a ticker only uses the news about this company (or
+# its market). Without this, a Samsung headline could create an "event"
+# that is then tested on the Nvidia price.
+TICKER_TOPICS = {
+    "NVDA": ["nvidia_supply"],
+    "000660.KS": ["sk_hynix_hbm", "memory_capex", "korea_chips"],
+    "005930.KS": ["samsung_hbm", "memory_capex", "korea_chips"],
+    "TSM": ["tsmc_cowos"],
 }
 
 GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"

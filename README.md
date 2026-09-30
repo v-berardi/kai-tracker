@@ -87,7 +87,7 @@ needing the real database.
 
 ## What works
 
-- Collecting prices for 4 tickers and news for 5 topics runs
+- Collecting prices for 4 tickers and news for 6 topics runs
   end-to-end and fills the database.
 - FinBERT scoring is incremental: only new articles get scored each
   time.
@@ -143,6 +143,10 @@ story, instead of only keeping the result that looks good.
   last update, because prices are rewritten at each run (yfinance
   changes old adjusted prices after splits and dividends). I use it
   only to check the data, the event study doesn't use it.
+- **Each ticker uses only its own news topics** (`TICKER_TOPICS` in
+  `src/config.py`). At first all the topics were mixed together, so a
+  headline about Samsung could create an event that was then tested on
+  Nvidia's price. Now the Nvidia study only uses the Nvidia topic.
 - **RSS instead of scraping the news website**: the RSS feed is simple,
   structured XML, and doesn't change format as often as a web page.
 - **Collecting data and scoring it are two separate steps.** New

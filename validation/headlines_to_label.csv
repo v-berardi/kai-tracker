@@ -1,0 +1,51 @@
+﻿id,query_tag,headline,my_label,reason
+24,sk_hynix_hbm,"HBC, HBF Emerge as Next-Gen Memory to Succeed HBM - 조선일보",neutral,"new memory tech that may follow HBM: a trend, no clear effect on SK Hynix"
+44,sk_hynix_hbm,Will SK Hynix’s HBM Re‑Prioritization Shift Change Photronics’ (PLAB) AI Supply Chain Narrative? - Sahm,neutral,a question about another company (Photronics)
+64,sk_hynix_hbm,Qualcomm challenges Nvidia's AI grip with chip that ditches HBM - Nikkei Asia,negative,a chip without HBM challenges Nvidia: bad for HBM makers like SK Hynix
+79,sk_hynix_hbm,Why Samsung and SK Hynix stock are falling today - Invezz,negative,Samsung and SK Hynix shares are falling
+126,nvidia_supply,Nvidia GPU Demand Remains Strong as Blackwell Tightens - Let's Data Science,positive,strong demand for Nvidia GPUs
+171,nvidia_supply,"NVIDIA Rubin Delay Hits Samsung, SK Hynix HBM - 조선일보",negative,a delay of Nvidia Rubin hurts the HBM sales of Samsung and SK Hynix
+211,samsung_hbm,Samsung Shares Rise to Year’s High on Nvidia Quality Test Report - Bloomberg.com,positive,Samsung shares at the year's high
+313,memory_capex,"Micron Technology rides the AI memory supercycle, but Reuters says the party might be over for latecomers - Crypto Briefing",negative,the main message is a warning: the party might be over
+332,memory_capex,Hanmi Semiconductor ships two-in-one BOC COB bonder to boost AI memory - CHOSUNBIZ - Chosunbiz,positive,new equipment shipped to boost AI memory
+349,memory_capex,Semiconductor Fab Buildout Delays – 2023 to 2025 Wafer Fabrication Equipment Outlook - SemiAnalysis,negative,fab buildout delays
+351,memory_capex,"Samsung, SK Hynix ramp up DRAM business on rapid AI growth - The Korea Economic Daily Global Edition",positive,Samsung and SK Hynix grow their DRAM business
+376,memory_capex,Capital Expenditure Moves to Memory - EE Times Asia,neutral,"capex moves to memory: more investment but also more supply, no clear direction"
+387,korea_chips,S. Korea’s Early Exports Jump Again as AI Boom Fuels Chip Demand - Bloomberg.com,positive,Korean exports jump on chip demand
+410,korea_chips,South Korea mulls end to naphtha export ban - Quantum Commodity Intelligence,neutral,"naphtha export ban, not about chips"
+414,korea_chips,South Korea exports post strongest growth since 1978 as AI boom fuels chip demand - The Straits Times,positive,strongest export growth since 1978 thanks to chips
+427,korea_chips,South Korea Exports Surge 86% in Early June - Businesskorea,positive,exports surge 86%
+429,korea_chips,South Korea Exports Hit Record $62 Billion in 20 Days - 조선일보,positive,record exports
+495,sk_hynix_hbm,"AI Demand Reshapes DRAM Rankings in Q2 2026; Samsung Leads, Micron Narrows Gap, CXMT Soars - Counterpoint Research",neutral,"mixed: Samsung leads, Micron and CXMT gain, SK Hynix not the winner"
+498,sk_hynix_hbm,Nvidia locks down memory supply from SK Hynix as part of $500 billion AI deal - CNBC,positive,Nvidia secures SK Hynix memory in a huge deal
+538,sk_hynix_hbm,Samsung vs SK Hynix vs CXMT: Who Wins the AI Memory War and Which Stock Should You Buy? - TradingKey,neutral,"a comparison article, no direction"
+539,sk_hynix_hbm,"Samsung, SK hynix eye gains as GDDR7 prices rise - The Korea Herald",positive,GDDR7 prices rise: gains for Samsung and SK Hynix
+540,sk_hynix_hbm,"Samsung to Overtake SK Hynix in HBM Market Next Year on HBM4 Push, UBS Says - bloomingbit",negative,SK Hynix could be overtaken by Samsung (topic = SK Hynix)
+548,sk_hynix_hbm,"SK hynix Went All In On HBM, And Paid For It With A Bruising Miss On Consensus Expectations For Q2’26, But Adds It’s Integrating A “Cooling Element” Within HBM5 - Wccftech",negative,SK Hynix missed the consensus for Q2
+560,sk_hynix_hbm,"""SK hynix Expected to Be Overtaken Next Year""... HBM Market ‘Reversal Forecast’ Jolts Retail Investors - asiae.co.kr",negative,"forecast that SK Hynix will be overtaken, investors worried"
+571,nvidia_supply,"DRAM Supply to Remain Tight in 2027, Prompting NVIDIA to Lower HBM Configurations for Rubin Ultra, Says TrendForce - TrendForce",negative,Nvidia must lower HBM configurations because of tight supply
+589,nvidia_supply,Samsung and SK Hynix Lock In AI Chip Supply Through 2030 With $950B in US Deals - Tech Times,positive,long supply deals worth $950B
+606,nvidia_supply,Not Just Flagships: NVIDIA Raises GPU Kit Costs Across Entire GeForce Lineup - Tech Times,neutral,"higher prices: bad for buyers, good for margins, no clear direction"
+625,nvidia_supply,NVIDIA's HBM4 Supply Chain Picture Clears as All Three Memory Giants Secure Orders - finance.biggo.com,positive,Nvidia HBM4 supply is secured
+718,samsung_hbm,Samsung gains ground in Nvidia HBM4 tests as AI memory supply race tightens - theinvestor.co.kr,positive,Samsung progresses in Nvidia HBM4 tests
+760,samsung_hbm,"Samsung to Supply HBM3E to Broadcom, Reclaiming AI Chip Dominance - Businesskorea",positive,Samsung wins HBM3E supply to Broadcom
+786,memory_capex,Nova: Riding A Trillion‑Dollar Fab Capex Wave (NASDAQ:NVMI) - Seeking Alpha,positive,a company rides a big capex wave
+940,korea_chips,"S.Korea's Q2 growth tops estimates, cementing expectations of further BOK rate hikes - KED Global",neutral,"mixed: growth beats estimates, but more rate hikes expected"
+1004,sk_hynix_hbm,"SK hynix Breaks Ground on U.S. HBM Fab in Indiana, Targets Mass Production by Q2 2029 - TechPowerUp",positive,SK Hynix starts a new US HBM fab
+1109,nvidia_supply,"Samsung Hits 80% Yield on HBM4 as NVIDIA, AMD Weigh Downgrading Specs Amid Supply Crunch - finance.biggo.com",negative,Nvidia may downgrade specs because of the supply crunch (topic = Nvidia)
+1213,samsung_hbm,President Trump Permits NVIDIA H200 AI Chip Exports to China - 조선일보,positive,"Nvidia can export H200 to China: more sales, also for its HBM suppliers"
+1289,memory_capex,China’s memory expansion reshapes global DRAM and NAND competition - Astute Group,neutral,"China changes the competition, neutral tone"
+1330,korea_chips,Korea Exports to India Jump 30% - Businesskorea,positive,exports to India jump
+1420,sk_hynix_hbm,SK hynix (NSDQ:SKHY) Why Its 9x P/E Could Be a Valuation Trap - stocksdownunder.com,negative,SK Hynix could be a valuation trap
+1513,nvidia_supply,Nvidia Could Use Less HBM Per GPU—and Buy More Overall - Dr. Robert Castellano's Semiconductor Deep Dive Newsletter,neutral,"an analysis of how much HBM Nvidia uses, no direction"
+1526,nvidia_supply,"Lee Jae-yong, Chey Tae-won, and Jensen Huang to Meet in New York After Two Months — HBM and AI Infrastructure Cooperation on Agenda - finance.biggo.com",neutral,"a meeting is planned, no result yet"
+1542,nvidia_supply,Nvidia reportedly shifts HBM4 mix toward 8-high as memory supply stays tight - digitimes,negative,Nvidia shifts to a lower HBM4 mix because supply is tight (same as 571 and 1552)
+1552,nvidia_supply,Nvidia Weighs Lower Specs Amid HBM Shortage - businesskorea.co.kr,negative,Nvidia may lower specs because of the HBM shortage
+1750,memory_capex,4 Semiconductor Stocks to Buy Right Now to Ride on the AI Capex Boom - The Globe and Mail,positive,stocks to buy on the capex boom
+1794,korea_chips,"South Korea's KOSPI Falls Below 7,000 After Chuseok Holiday as Semiconductor Heavyweights Slide - finance.biggo.com",negative,KOSPI falls as chip heavyweights slide
+1815,korea_chips,"Bae, Kim & Lee and Reed Smith hold seminar on semiconductor export control strategies - 헤럴드경제",neutral,a legal seminar
+1822,korea_chips,South Korea ramps up spy law to protect chip secrets from China - The Japan Times,neutral,"a new security law, no direct effect on the stocks"
+1886,tsmc_cowos,"Synopsys, TSMC Advance Agentic AI for Chip Design - embedded.com",positive,TSMC advances with Synopsys on AI chip design
+1921,tsmc_cowos,"Why Is TSMC Critical to the AI Boom? $64 Billion Capex, 66% HPC Revenue and CoWoS Expansion Explain Its Role - InfotechLead",positive,"TSMC is critical to AI: big capex, high revenue, CoWoS expansion"
+1970,tsmc_cowos,"NVIDIA’s CoWoS AI Chip Packaging Demand To Be Foreshadowed In 2027 By AMD Due To Agentic AI CPU Ramp, Says Morgan Stanley - Wccftech",neutral,"CoWoS demand moves from Nvidia to AMD: TSMC makes both, no clear direction"
+1972,tsmc_cowos,"TSMC's CoWoS Shortage Fuels Outsourcing Expansion, But Intel and Taiwan's OSATs Are Chasing Different Opportunities - XenoSpectrum",neutral,mixed: shortage (strong demand) but work goes to other companies

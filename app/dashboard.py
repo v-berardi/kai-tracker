@@ -77,7 +77,9 @@ def load_stats() -> dict:
     with get_connection() as conn:
         n_prices  = conn.execute("SELECT COUNT(*) FROM prices").fetchone()[0]
         n_news    = conn.execute("SELECT COUNT(*) FROM news").fetchone()[0]
-        n_scored  = conn.execute("SELECT COUNT(*) FROM news WHERE sentiment_score IS NOT NULL").fetchone()[0]
+        n_scored  = conn.execute(
+            "SELECT COUNT(*) FROM news WHERE sentiment_score IS NOT NULL"
+        ).fetchone()[0]
         date_range = conn.execute("SELECT MIN(date), MAX(date) FROM prices").fetchone()
     return {"n_prices": n_prices, "n_news": n_news, "n_scored": n_scored,
             "date_min": date_range[0], "date_max": date_range[1]}
@@ -199,7 +201,8 @@ with tab_chart:
                 marker_color=bar_colors,
                 opacity=0.75,
                 customdata=sentiment_w["n_articles"],
-                hovertemplate="%{x|%Y-%m-%d}<br>Score: %{y:.3f}<br>Articles: %{customdata}<extra></extra>",
+                hovertemplate=("%{x|%Y-%m-%d}<br>Score: %{y:.3f}"
+                               "<br>Articles: %{customdata}<extra></extra>"),
             ),
             secondary_y=True,
         )
@@ -217,7 +220,7 @@ with tab_chart:
     fig.update_xaxes(gridcolor="#1f2937")
 
     st.subheader(f"{TICKERS[ticker]} - price vs sentiment ({window_days}d)")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.divider()
     st.subheader("Recent articles (scored by FinBERT)")
@@ -231,7 +234,7 @@ with tab_chart:
             news_df[["", "Date", "query_tag", "source", "Score", "title"]].rename(
                 columns={"query_tag": "Topic", "source": "Source", "title": "Title"}
             ),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
 
 
@@ -341,7 +344,7 @@ just means this signal is not strong enough to prove anything on its own.
     fig_car.update_xaxes(gridcolor="#1f2937", dtick=1)
     fig_car.update_yaxes(gridcolor="#1f2937")
 
-    st.plotly_chart(fig_car, use_container_width=True)
+    st.plotly_chart(fig_car, width="stretch")
 
     st.caption(
         "Reading it: if the line rises after day 0, positive sentiment spikes "
@@ -376,7 +379,7 @@ just means this signal is not strong enough to prove anything on its own.
         )
         fig_hist.update_xaxes(gridcolor="#1f2937")
         fig_hist.update_yaxes(gridcolor="#1f2937")
-        st.plotly_chart(fig_hist, use_container_width=True)
+        st.plotly_chart(fig_hist, width="stretch")
 
     st.divider()
     st.markdown("**Detected events**")
@@ -387,7 +390,9 @@ just means this signal is not strong enough to prove anything on its own.
         if model != "market":
             ev = ev.drop(columns=["beta"])   # beta only exists in the market model
         ev["event_date"] = ev["event_date"].dt.strftime("%Y-%m-%d")
-        ev["direction"] = ev["direction"].map({"positive": "🟢 positive", "negative": "🔴 negative"})
+        ev["direction"] = ev["direction"].map(
+            {"positive": "🟢 positive", "negative": "🔴 negative"}
+        )
         ev = ev.rename(columns={
             "event_date": "Date", "direction": "Direction",
             "avg_score": "Sentiment score", "beta": "Beta",
@@ -397,7 +402,7 @@ just means this signal is not strong enough to prove anything on its own.
         })
         st.dataframe(
             ev,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Sentiment score":  st.column_config.NumberColumn(format="%+.3f"),

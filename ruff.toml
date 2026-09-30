@@ -1,0 +1,5 @@
+# Settings for ruff, the linter (it checks the code style and some bugs).
+line-length = 100
+
+[lint]
+select = ["E", "F", "W", "B"]

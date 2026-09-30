@@ -95,7 +95,7 @@ def run(limit: int | None = None) -> int:
 
     scored = score_texts(titles)
     rows = [(score, label, news_id)
-            for (score, label), news_id in zip(scored, ids)]
+            for (score, label), news_id in zip(scored, ids, strict=True)]
     n = update_sentiment(rows)
     logger.info("Scores written: %d", n)
     return n

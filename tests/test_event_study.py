@@ -200,7 +200,7 @@ def test_aggregate_t_test_matches_scipy():
         "direction": ["positive"] * 5,
         "avg_score": [0.5] * 5,
         "normal_return": [0.0] * 5,
-        "car": [a + b for a, b in zip(car_pre, car_post)],
+        "car": [a + b for a, b in zip(car_pre, car_post, strict=True)],
         "car_pre": car_pre,
         "car_post": car_post,
         "ar_series": [[0.0] * 11] * 5,

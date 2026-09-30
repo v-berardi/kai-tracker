@@ -28,7 +28,7 @@ def _add_scored_news(items: list[tuple[str, str, float]]) -> None:
     unscored = db.fetch_unscored_news()
     db.update_sentiment([
         (score, "positive", news_id)
-        for (news_id, _title), (_tag, _pub, score) in zip(unscored, items)
+        for (news_id, _title), (_tag, _pub, score) in zip(unscored, items, strict=True)
     ])
 
 
@@ -68,7 +68,7 @@ def test_daily_sentiment_uses_the_exchange_trading_day(temp_db):
 
     def days(ticker):
         df = db.daily_sentiment(ticker=ticker)
-        return dict(zip(df["date"], df["n_articles"]))
+        return dict(zip(df["date"], df["n_articles"], strict=True))
 
     assert days("NVDA") == {"2026-01-05": 2, "2026-01-06": 1}
     assert days("000660.KS") == {"2026-01-05": 1, "2026-01-06": 2}

@@ -1,0 +1,4 @@
+# Dark theme for the dashboard, so the page matches the Plotly charts
+# (they use the "plotly_dark" template in app/dashboard.py).
+[theme]
+base = "dark"

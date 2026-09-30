@@ -172,32 +172,32 @@ it that I would report the 4 stocks, whatever the result.
 ```
    ticker    group  n CAAR after p after CAAR before p before CAAR full p full
      NVDA      all  6    +0.0032   0.908     +0.0353    0.050   +0.0385  0.253
-     NVDA positive  4    -0.0076   0.860     +0.0492    0.017   +0.0416  0.437
-     NVDA negative  2    +0.0247   0.360     +0.0075    0.855   +0.0322  0.302
+     NVDA positive <5
+     NVDA negative <5
 000660.KS      all  7    +0.0050   0.612     +0.0203    0.547   +0.0253  0.525
 000660.KS positive  6    +0.0039   0.738     +0.0313    0.415   +0.0352  0.449
+000660.KS negative <5
 005930.KS      all  7    -0.0014   0.935     +0.0116    0.513   +0.0103  0.738
 005930.KS positive  5    -0.0114   0.618     +0.0009    0.966   -0.0105  0.793
-005930.KS negative  2    +0.0237   0.202     +0.0384    0.352   +0.0621  0.160
+005930.KS negative <5
       TSM      all  7    +0.0203   0.038     -0.0055    0.707   +0.0148  0.409
       TSM positive  6    +0.0229   0.043     -0.0044    0.800   +0.0185  0.380
+      TSM negative <5
 
-30 tests in total. p < 0.05: 3 (about 1.5 expected by chance only).
-With the Bonferroni correction (p < 0.0017): 0.
+21 tests in total. p < 0.05: 2 (about 1.1 expected by chance only).
+With the Bonferroni correction (p < 0.0024): 0.
+Groups with less than 5 events have no test (n = <5).
 ```
-
-(Groups with less than 2 events have no test, for example the
-negative events of SK Hynix and TSMC.)
 
 **Main result: no clear link.** For the main question (do returns move
 *after* a sentiment spike, days [0, +5]), 3 stocks out of 4 are far
-from significant. Only TSMC has p < 0.05 (p = 0.038), but I don't think
-it is a real effect:
+from significant. Only TSMC has p < 0.05 (p = 0.038, and 0.043 for the
+positive events only), but I don't think it is a real effect:
 
 - With the constant mean model, the same TSMC events give p = 0.774.
   A real effect should not disappear when I change the baseline.
 - It is only 7 events.
-- There are 30 tests: 3 are below 0.05, and about 1.5 are expected by
+- There are 21 tests: 2 are below 0.05, and about 1 is expected by
   chance only. With the Bonferroni correction, none is significant.
 
 **Market model vs constant mean.** Changing the baseline changes the

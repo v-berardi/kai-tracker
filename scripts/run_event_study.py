@@ -59,26 +59,31 @@ def main() -> None:
         print("No results. Check that the database has sentiment scores.")
         return
 
+    def line(label: str, caar: float, t: float, p: float) -> str:
+        sig = "SIGNIFICANT" if p < 0.05 else "not significant"
+        return (f"    {label:15s} CAAR={caar:+.4f}  t={t:+.2f}  "
+                f"p={p:.3f}  -> {sig}")
+
     for direction, res in results.items():
         if res is None:
             print(f"[{direction:8s}] Not enough events for a test.\n")
             continue
+        print(f"[{direction:8s}]  n={res.n_events}")
+        # "after" is the real question: do returns move AFTER the news?
+        print(line("after  [0,+5]", res.caar_post, res.t_post, res.p_post))
+        print(line("before [-5,-1]", res.caar_pre, res.t_pre, res.p_pre))
+        print(line("full   [-5,+5]", res.caar, res.t_stat, res.p_value))
+        print()
 
-        sig = "SIGNIFICANT" if res.p_value < 0.05 else "not significant"
-        print(f"[{direction:8s}]  n={res.n_events:3d}  "
-              f"CAAR={res.caar:+.4f}  "
-              f"t={res.t_stat:+.2f}  "
-              f"p={res.p_value:.3f}  -> {sig}")
-
-    print()
     if "all" in results and results["all"] is not None:
         df = results["all"].events_df[
-            ["event_date", "direction", "avg_score", "normal_return", "car"]
+            ["event_date", "direction", "avg_score", "normal_return",
+             "car_pre", "car_post", "car"]
         ].copy()
         df["event_date"] = df["event_date"].dt.strftime("%Y-%m-%d")
         df["avg_score"] = df["avg_score"].map("{:+.3f}".format)
-        df["normal_return"] = df["normal_return"].map("{:+.4f}".format)
-        df["car"] = df["car"].map("{:+.4f}".format)
+        for col in ["normal_return", "car_pre", "car_post", "car"]:
+            df[col] = df[col].map("{:+.4f}".format)
         print(df.to_string(index=False))
     print()
 

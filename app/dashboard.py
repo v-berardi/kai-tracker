@@ -245,6 +245,10 @@ stock return in the days after.
 4. **CAAR** = average CAR across all events.
    **t-test**: checks if CAAR = 0 or not. If p > 0.05, we cannot say
    the signal is real — it could just be noise.
+5. **Before vs after**: the CAR is split in days [-5, -1] and
+   [0, +5]. Only the "after" part tells if returns move *after* the
+   news. A big "before" part means the headlines talk about a price
+   move that already happened.
 
 **Expected result**: most likely p > 0.05. That is an honest result, it
 just means this signal is not strong enough to prove anything on its own.
@@ -265,13 +269,21 @@ just means this signal is not strong enough to prove anything on its own.
     m1, m2, m3, m4 = st.columns(4)
 
     if res_all:
+        # main numbers = "after" window [0, +5], because this is the real
+        # question of the study (do returns move AFTER the news?)
         m1.metric("Events (total)", res_all.n_events)
-        m2.metric("Total CAAR", f"{res_all.caar:+.2%}",
-                  help="Cumulative Average Abnormal Return over [-5, +5]")
-        m3.metric("t-stat", f"{res_all.t_stat:+.2f}")
-        sig = "Significant (p<0.05)" if res_all.p_value < 0.05 else "Not significant"
-        m4.metric("p-value", f"{res_all.p_value:.3f}", delta=sig,
-                  delta_color="normal" if res_all.p_value < 0.05 else "off")
+        m2.metric("CAAR after [0, +5]", f"{res_all.caar_post:+.2%}",
+                  help="Average abnormal return from the event day to day +5")
+        m3.metric("t-stat (after)", f"{res_all.t_post:+.2f}")
+        sig = "Significant (p<0.05)" if res_all.p_post < 0.05 else "Not significant"
+        m4.metric("p-value (after)", f"{res_all.p_post:.3f}", delta=sig,
+                  delta_color="normal" if res_all.p_post < 0.05 else "off")
+        st.caption(
+            f"Before the event [-5, -1]: CAAR {res_all.caar_pre:+.2%} "
+            f"(p={res_all.p_pre:.3f}).  "
+            f"Full window [-5, +5]: CAAR {res_all.caar:+.2%} "
+            f"(p={res_all.p_value:.3f})."
+        )
 
     st.divider()
 
@@ -355,12 +367,14 @@ just means this signal is not strong enough to prove anything on its own.
     st.markdown("**Detected events**")
 
     if res_all and not res_all.events_df.empty:
-        ev = res_all.events_df[["event_date", "direction", "avg_score", "normal_return", "car"]].copy()
+        ev = res_all.events_df[["event_date", "direction", "avg_score", "normal_return",
+                                "car_pre", "car_post", "car"]].copy()
         ev["event_date"] = ev["event_date"].dt.strftime("%Y-%m-%d")
         ev["direction"] = ev["direction"].map({"positive": "🟢 positive", "negative": "🔴 negative"})
         ev = ev.rename(columns={
             "event_date": "Date", "direction": "Direction",
             "avg_score": "Sentiment score", "normal_return": "Normal return",
+            "car_pre": "CAR [-5,-1]", "car_post": "CAR [0,+5]",
             "car": "CAR [-5,+5]",
         })
         st.dataframe(
@@ -370,6 +384,8 @@ just means this signal is not strong enough to prove anything on its own.
             column_config={
                 "Sentiment score":  st.column_config.NumberColumn(format="%+.3f"),
                 "Normal return": st.column_config.NumberColumn(format="%+.4f"),
+                "CAR [-5,-1]":      st.column_config.NumberColumn(format="%+.4f"),
+                "CAR [0,+5]":       st.column_config.NumberColumn(format="%+.4f"),
                 "CAR [-5,+5]":      st.column_config.NumberColumn(format="%+.4f"),
             },
         )

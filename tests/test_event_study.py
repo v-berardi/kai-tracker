@@ -8,6 +8,7 @@ CAR, CAAR, t-test) without needing real data or a network connection.
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import stats
 
 from src.analysis import event_study as es
 
@@ -83,6 +84,9 @@ def test_compute_cars_matches_manual_calculation(monkeypatch):
     expected_car = sum(bump.values())
     assert cars.iloc[0]["car"] == pytest.approx(expected_car)
     assert cars.iloc[0]["normal_return"] == pytest.approx(0.0)
+    # before the event: only day -2. From day 0: days 0 and +3
+    assert cars.iloc[0]["car_pre"] == pytest.approx(0.01)
+    assert cars.iloc[0]["car_post"] == pytest.approx(0.02 - 0.005)
 
 
 def test_compute_cars_skips_events_without_enough_history():
@@ -157,6 +161,8 @@ def test_aggregate_computes_caar_and_flags_significance():
         "avg_score": [0.5, 0.6, 0.55],
         "normal_return": [0.0, 0.0, 0.0],
         "car": [0.11, 0.11, 0.11],
+        "car_pre": [0.05, 0.05, 0.05],     # 5 days before the event
+        "car_post": [0.06, 0.06, 0.06],    # event day + 5 days after
         "ar_series": [ar_series, ar_series, ar_series],
     })
 
@@ -177,7 +183,34 @@ def test_aggregate_returns_none_with_too_few_events():
         "avg_score": [0.5],
         "normal_return": [0.0],
         "car": [0.05],
+        "car_pre": [0.02],
+        "car_post": [0.03],
         "ar_series": [[0.01] * 11],
     })
 
     assert es.aggregate(cars, direction="all", ticker="FAKE") is None
+
+
+def test_aggregate_t_test_matches_scipy():
+    # different CAR values, so the standard deviation is not zero
+    car_pre = [0.01, -0.02, 0.03, 0.00, 0.02]
+    car_post = [0.04, 0.01, 0.05, 0.03, 0.02]
+    cars = pd.DataFrame({
+        "event_date": pd.date_range("2026-01-01", periods=5, freq="MS"),
+        "direction": ["positive"] * 5,
+        "avg_score": [0.5] * 5,
+        "normal_return": [0.0] * 5,
+        "car": [a + b for a, b in zip(car_pre, car_post)],
+        "car_pre": car_pre,
+        "car_post": car_post,
+        "ar_series": [[0.0] * 11] * 5,
+    })
+
+    result = es.aggregate(cars, direction="all", ticker="FAKE")
+
+    expected = stats.ttest_1samp(car_post, 0.0)
+    assert result.caar_post == pytest.approx(np.mean(car_post))
+    assert result.t_post == pytest.approx(expected.statistic)
+    assert result.p_post == pytest.approx(expected.pvalue)
+    assert result.p_post < 0.05          # clearly positive after the event
+    assert result.p_pre > 0.05           # no clear move before

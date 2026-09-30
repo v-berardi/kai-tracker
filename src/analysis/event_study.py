@@ -36,6 +36,14 @@ followed by unusual stock returns. Steps:
      CAAR = average CAR across all events.
      A t-test checks if CAAR is really different from 0, or if it could
      just be random noise.
+     I also split the CAR in two parts, with one t-test for each:
+       - before the event: days [-5, -1]
+       - from the event day: days [0, +5]
+     Only the second part tells if returns move AFTER the news. The first
+     part shows if the price was already moving before: headlines often
+     talk about a move that already happened ("Nvidia shares jump"), so
+     a big "before" CAR means the news follows the price and not the
+     opposite.
 
 What we expect: the t-test probably will NOT be significant, because a
 daily news sentiment score is not a proven trading signal by itself.
@@ -59,9 +67,15 @@ class StudyResult(NamedTuple):
     ticker: str
     direction: str          # 'positive', 'negative', or 'all'
     n_events: int
-    caar: float             # Cumulative Average Abnormal Return
+    caar: float             # Cumulative Average Abnormal Return, full window
     t_stat: float
     p_value: float
+    caar_pre: float         # same but only the days before the event [-5, -1]
+    t_pre: float
+    p_pre: float
+    caar_post: float        # same but from the event day [0, +5]
+    t_post: float
+    p_post: float
     caar_by_day: list[float]   # CAAR added up day by day over the event window
     relative_days: list[int]   # [-5, -4, ..., 0, ..., +5]
     events_df: pd.DataFrame    # details for each event
@@ -133,12 +147,13 @@ def compute_cars(
     events: pd.DataFrame,
     estimation_window: tuple[int, int] = (-120, -21),
     event_window: tuple[int, int] = (-5, 5),
-    min_estimation_days: int = 60,
+    min_estimation_days: int = 30,
 ) -> pd.DataFrame:
     """Compute the CAR (Cumulative Abnormal Return) for each event.
 
     Returns a DataFrame with: event_date, direction, avg_score,
-    normal_return, car, ar_series (the AR value for each day).
+    normal_return, car (full window), car_pre (days before the event),
+    car_post (event day and after), ar_series (the AR value for each day).
 
     The windows count trading days, not calendar days. This matters: if
     an event happens on a Friday, the next day in the window is the
@@ -152,7 +167,8 @@ def compute_cars(
     - Clean baseline: I remove the days inside any event window from the
       estimation window of the other events, so the reaction to one news
       does not change the "normal" return of another event.
-      min_estimation_days = minimum number of clean days I need.
+      min_estimation_days = minimum number of clean days I need
+      (30 days is a usual minimum to estimate a mean).
     """
     prices = _load_prices(ticker)
     trading_dates = prices["date"].values          # numpy datetime64
@@ -160,6 +176,7 @@ def compute_cars(
     n_days = len(trading_dates)
 
     ev_len = event_window[1] - event_window[0] + 1  # number of days in the window
+    n_pre = max(-event_window[0], 0)                # days before day 0 in the window
 
     # 1. find the trading day of each event
     positions: list[tuple[int, pd.Series]] = []
@@ -178,9 +195,18 @@ def compute_cars(
         start = max(idx + event_window[0], 0)
         in_event_window[start : idx + event_window[1] + 1] = True
 
+    share = in_event_window.mean()
+    if share > 0.5:
+        logger.warning(
+            "%.0f%% of the trading days are in an event window, the events "
+            "are not rare so it is hard to find a clean baseline. Try a "
+            "higher threshold.", 100 * share,
+        )
+
     # 3. CAR of each event with enough data and no overlap
     results = []
     last_kept_idx: int | None = None
+    skipped = {"not enough data": 0, "overlap": 0, "baseline too short": 0}
 
     for idx, event in positions:
         est_s = idx + estimation_window[0]
@@ -190,11 +216,13 @@ def compute_cars(
 
         if est_s < 0 or ev_e >= n_days:
             logger.debug("Not enough data for event %s, skipped", event["date"].date())
+            skipped["not enough data"] += 1
             continue
 
         if last_kept_idx is not None and idx - last_kept_idx < ev_len:
             logger.debug("Event %s overlaps the previous event window, skipped",
                          event["date"].date())
+            skipped["overlap"] += 1
             continue
 
         est_returns = returns[est_s : est_e + 1]
@@ -202,6 +230,7 @@ def compute_cars(
         if len(clean) < min_estimation_days:
             logger.debug("Event %s: only %d clean estimation days, skipped",
                          event["date"].date(), len(clean))
+            skipped["baseline too short"] += 1
             continue
 
         normal_ret = clean.mean()
@@ -216,14 +245,35 @@ def compute_cars(
             "avg_score": event["avg_score"],
             "normal_return": float(normal_ret),
             "car": car,
+            "car_pre": float(ar[:n_pre].sum()),
+            "car_post": float(ar[n_pre:].sum()),
             "ar_series": ar.tolist(),
         })
         last_kept_idx = idx
 
+    # + the events after the last price date (they are not in `positions`)
+    skipped["not enough data"] += len(events) - len(positions)
+    logger.info("Events kept: %d of %d (skipped: %s)", len(results), len(events),
+                ", ".join(f"{k} {v}" for k, v in skipped.items()))
     return pd.DataFrame(results)
 
 
 # -- Step 3: combine results and run the significance test --
+
+def _t_test(values: np.ndarray) -> tuple[float, float, float]:
+    """One sample t-test, H0: mean = 0. Returns (mean, t_stat, p_value).
+
+    t = mean / (std / sqrt(n)), with n - 1 degrees of freedom.
+    If all the values are equal, std = 0 and we can't compute t, so I
+    return t = 0 to not divide by zero.
+    """
+    n = len(values)
+    mean = float(values.mean())
+    se = float(values.std(ddof=1) / np.sqrt(n))
+    t_stat = mean / se if se > 0 else 0.0
+    p_value = float(2 * (1 - stats.t.cdf(abs(t_stat), df=n - 1)))
+    return mean, t_stat, p_value
+
 
 def aggregate(
     cars: pd.DataFrame,
@@ -233,7 +283,8 @@ def aggregate(
 ) -> StudyResult | None:
     """Compute CAAR, t-stat, and p-value across all events.
 
-    We test H0: CAAR = 0 (sentiment is not linked to abnormal returns).
+    We test H0: CAAR = 0 (sentiment is not linked to abnormal returns)
+    three times: on the full window, before the event and after it.
     If p < 0.05, the result is called significant. Based on the
     limitations of this method, we expect it usually will NOT be.
     """
@@ -243,18 +294,16 @@ def aggregate(
         logger.warning("Too few events (%d) to run a statistical test.", n)
         return None
 
-    car_values = sub["car"].values
-    caar = float(car_values.mean())
-    se = float(car_values.std(ddof=1) / np.sqrt(n))
-    t_stat = caar / se if se > 0 else 0.0
-    p_value = float(2 * (1 - stats.t.cdf(abs(t_stat), df=n - 1)))
+    caar, t_stat, p_value = _t_test(sub["car"].values)
+    caar_pre, t_pre, p_pre = _t_test(sub["car_pre"].values)
+    caar_post, t_post, p_post = _t_test(sub["car_post"].values)
 
     ar_matrix = np.array(sub["ar_series"].tolist())   # shape: (n_events, days_in_window)
     caar_cumulative = ar_matrix.mean(axis=0).cumsum().tolist()
 
     logger.info(
-        "[%s | %s] n=%d  CAAR=%.4f  t=%.2f  p=%.3f",
-        ticker, direction, n, caar, t_stat, p_value,
+        "[%s | %s] n=%d  CAAR=%.4f (before %.4f, after %.4f)  p_after=%.3f",
+        ticker, direction, n, caar, caar_pre, caar_post, p_post,
     )
     return StudyResult(
         ticker=ticker,
@@ -263,6 +312,12 @@ def aggregate(
         caar=caar,
         t_stat=t_stat,
         p_value=p_value,
+        caar_pre=caar_pre,
+        t_pre=t_pre,
+        p_pre=p_pre,
+        caar_post=caar_post,
+        t_post=t_post,
+        p_post=p_post,
         caar_by_day=caar_cumulative,
         relative_days=list(range(event_window[0], event_window[1] + 1)),
         events_df=sub.copy(),

@@ -82,8 +82,9 @@ pytest tests/ -v
 ```
 
 The tests use made-up sentiment and price numbers, so they check the
-event study logic (event detection, CAR, CAAR, the t-test) without
-needing the real database.
+event study logic (event detection, CAR, CAAR, the t-test, overlapping
+events) without needing the real database. The database tests use a
+temporary SQLite file, so my real database is not touched.
 
 ## What works
 
@@ -111,6 +112,11 @@ needing the real database.
   answer the question on a 2-year demo dataset.
 
 ## Example result, and why I'm not hiding it
+
+> **Note:** this output comes from an older version of the study,
+> before I fixed the news topics per ticker, the time zones, the
+> overlapping events and the before/after split of the CAR. I will
+> replace it with the output of the new version.
 
 This is the real output of `python scripts/run_event_study.py --ticker NVDA`,
 on about 2 years of data (47 sentiment spikes detected):
@@ -162,6 +168,12 @@ story, instead of only keeping the result that looks good.
   URL gives me deduplication for free.
 - **Each news feed runs on its own**, so if one of them fails, the
   others still work.
+- **The CAR is split in "before" [-5, -1] and "after" [0, +5].** My
+  question is if returns move *after* the news, so the "after" part is
+  the main test. The "before" part is still useful: a lot of headlines
+  talk about a price move that already happened ("Nvidia shares jump"),
+  so a big "before" CAR means the news follows the price and not the
+  opposite.
 - **±5 trading day event window**: about a week on each side, long
   enough to see if the market keeps reacting, short enough that an
   unrelated news story is unlikely to land in the same window.
